@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2023", "module": "CommonJS", "moduleResolution": "Node",
+    "lib": ["ES2023", "DOM"], "outDir": "dist", "rootDir": ".",
+    "strict": true, "noUncheckedIndexedAccess": true, "noEmitOnError": true,
+    "experimentalDecorators": true, "emitDecoratorMetadata": true,
+    "esModuleInterop": true, "skipLibCheck": true, "forceConsistentCasingInFileNames": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

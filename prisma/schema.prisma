@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client"
+  output = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Rol {
+  ADMIN
+  MEDICO
+}
+enum EstadoInforme {
+  BORRADOR
+  PUBLICADO
+  RETIRADO
+}
+enum EstadoAviso {
+  PENDIENTE
+  ENVIANDO
+  ACEPTADO
+  ENTREGADO
+  LEIDO
+  FALLIDO
+  INCIERTO
+  CANCELADO
+}
+
+model Usuario {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique @db.VarChar(254)
+  nombre String @db.VarChar(160)
+  passwordHash String
+  rol Rol @default(MEDICO)
+  activo Boolean @default(true)
+  createdAt DateTime @default(now())
+  sesiones Sesion[]
+  informes Informe[]
+}
+
+model Sesion {
+  id String @id @default(uuid()) @db.Uuid
+  tokenHash String @unique
+  usuarioId String? @db.Uuid
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+  accesoId String? @db.Uuid
+  acceso AccesoPaciente? @relation(fields: [accesoId], references: [id])
+  expiraEn DateTime
+  createdAt DateTime @default(now())
+  @@index([expiraEn])
+}
+
+model Paciente {
+  id String @id @default(uuid()) @db.Uuid
+  nombre String @db.VarChar(160)
+  ci String? @unique @db.VarChar(40)
+  pac String? @unique @db.VarChar(40)
+  telefono String? @db.VarChar(20)
+  referenciaCrm String? @unique @db.VarChar(80)
+  createdAt DateTime @default(now())
+  informes Informe[]
+}
+
+model Informe {
+  id String @id @default(uuid()) @db.Uuid
+  pacienteId String @db.Uuid
+  paciente Paciente @relation(fields: [pacienteId], references: [id])
+  medicoId String @db.Uuid
+  medico Usuario @relation(fields: [medicoId], references: [id])
+  tipo String @default("ECOGRAFIA") @db.VarChar(40)
+  estudio String @db.VarChar(160)
+  fechaEstudio DateTime @db.Date
+  estado EstadoInforme @default(BORRADOR)
+  revision Int @default(1)
+  archivoId String? @unique @db.Uuid
+  archivo Archivo? @relation("ArchivoActual", fields: [archivoId], references: [id])
+  archivos Archivo[] @relation("ArchivosInforme")
+  acceso AccesoPaciente?
+  aviso Aviso?
+  publicadoEn DateTime?
+  retiradoEn DateTime?
+  motivoRetiro String? @db.VarChar(250)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([medicoId, createdAt, id])
+  @@index([pacienteId, createdAt])
+  @@index([estado, createdAt])
+}
+
+model Archivo {
+  id String @id @default(uuid()) @db.Uuid
+  informeId String @db.Uuid
+  informe Informe @relation("ArchivosInforme", fields: [informeId], references: [id])
+  actualDe Informe? @relation("ArchivoActual")
+  clave String @unique
+  sha256 String
+  bytes Int
+  paginas Int
+  createdAt DateTime @default(now())
+}
+
+model AccesoPaciente {
+  id String @id @default(uuid()) @db.Uuid
+  informeId String @unique @db.Uuid
+  informe Informe @relation(fields: [informeId], references: [id])
+  codigoHash String
+  expiraEn DateTime
+  revocadoEn DateTime?
+  sesiones Sesion[]
+}
+
+model Aviso {
+  id String @id @default(uuid()) @db.Uuid
+  informeId String @unique @db.Uuid
+  informe Informe @relation(fields: [informeId], references: [id])
+  telefono String @db.VarChar(20)
+  consentimientoEn DateTime
+  consentimientoVersion String @db.VarChar(40)
+  autorizadoPor String @db.Uuid
+  estado EstadoAviso @default(PENDIENTE)
+  intentos Int @default(0)
+  proximoIntento DateTime @default(now())
+  metaId String? @unique
+  codigoError Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([estado, proximoIntento])
+}
+
+model Auditoria {
+  id String @id @default(uuid()) @db.Uuid
+  actorId String @db.VarChar(80)
+  accion String @db.VarChar(60)
+  informeId String? @db.Uuid
+  createdAt DateTime @default(now())
+  @@index([informeId, createdAt])
+}
+
+model EventoIntegracion {
+  secuencia Int @id @default(autoincrement())
+  id String @unique @default(uuid()) @db.Uuid
+  tipo String @db.VarChar(60)
+  informeId String @db.Uuid
+  referenciaCrm String @db.VarChar(80)
+  createdAt DateTime @default(now())
+  @@unique([tipo, informeId])
+}
+
+model LimiteIntentos {
+  clave String @id
+  inicio DateTime
+  cantidad Int
+  @@index([inicio])
+}
+
+model CuotaAvisos {
+  dia String @id @db.VarChar(10)
+  intentos Int @default(0)
+}

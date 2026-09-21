@@ -1,0 +1,16 @@
+node_modules
+dist
+src/generated
+.git
+.env
+.env.*
+!.env.example
+var
+*.pdf
+*.log
+
+**/node_modules
+**/.next
+**/.env
+**/.env.*
+**/*.tsbuildinfo

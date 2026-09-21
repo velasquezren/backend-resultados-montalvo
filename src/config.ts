@@ -1,0 +1,35 @@
+import { resolve } from 'node:path';
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Falta configurar ${name}`);
+  return value;
+}
+
+export function readConfig() {
+  const production = process.env.NODE_ENV === 'production';
+  const databaseUrl = required('RESULTADOS_DATABASE_URL');
+  const db = new URL(databaseUrl);
+  if (!db.pathname.slice(1).startsWith('resultados')) throw new Error('La base debe ser exclusiva y comenzar por resultados');
+  const hmacKey = required('SESSION_HMAC_KEY');
+  if (!/^[a-f0-9]{64}$/i.test(hmacKey)) throw new Error('SESSION_HMAC_KEY debe contener 32 bytes hexadecimales');
+  const portal = new URL(required('PATIENT_PORTAL_URL'));
+  if (!['http:', 'https:'].includes(portal.protocol) || (production && portal.protocol !== 'https:')) throw new Error('PATIENT_PORTAL_URL inválida');
+  const origins = required('CORS_ORIGINS').split(',').map(value => new URL(value.trim()).origin);
+  if (production && origins.some(value => !value.startsWith('https://'))) throw new Error('CORS debe usar HTTPS');
+  const storage = process.env.STORAGE_DRIVER ?? 'local';
+  if (!['local', 'r2'].includes(storage)) throw new Error('STORAGE_DRIVER inválido');
+  if (production && (storage !== 'r2' || !process.env.CLAMAV_HOST)) throw new Error('Producción requiere R2 privado y ClamAV');
+  const notifications = process.env.NOTIFICATIONS_ENABLED === 'true';
+  const dailyLimit = Number(process.env.NOTIFICATION_DAILY_LIMIT ?? 100);
+  if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 10000) throw new Error('NOTIFICATION_DAILY_LIMIT inválido');
+  if (notifications) for (const key of ['WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_TOKEN', 'WHATSAPP_TEMPLATE', 'META_APP_SECRET', 'META_VERIFY_TOKEN']) required(key);
+  if (storage === 'r2') for (const key of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) required(key);
+  const port = Number(process.env.PORT ?? 3010);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT inválido');
+  return { production, databaseUrl, hmacKey, origins, port, storage, notifications, dailyLimit,
+    portalUrl: portal.href.replace(/\/$/, ''), privateDir: resolve(process.env.PRIVATE_STORAGE_DIR ?? 'var/private'),
+  };
+}
+export type AppConfig = ReturnType<typeof readConfig>;
+export const CONFIG = Symbol('CONFIG');
