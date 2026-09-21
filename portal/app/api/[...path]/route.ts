@@ -41,7 +41,7 @@ async function handler(
   const login =
     path === "v1/auth/login" ||
     /^v1\/portal\/accesos\/[^/]+\/ingresar$/.test(path);
-  const logout = path === "v1/auth/logout" || path === "v1/portal/salir";
+  const logout = path === "v1/auth/logout" || path === "v1/auth/password" || path === "v1/portal/salir";
   const token = request.cookies.get(cookieName)?.value;
   if (!login && !token)
     return error(401, "Tu sesión terminó. Vuelve a ingresar para continuar.");

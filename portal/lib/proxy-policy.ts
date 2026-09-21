@@ -16,6 +16,7 @@ export function allowed(path: string, method: string): boolean {
     [
       "v1/auth/login",
       "v1/auth/logout",
+      "v1/auth/password",
       "v1/auth/usuarios",
       "v1/pacientes",
       "v1/pacientes/buscar",

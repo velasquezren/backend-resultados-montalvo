@@ -2,7 +2,7 @@
 
 API independiente para que médicos registren pacientes por CI/PAC, adjunten un PDF de ecografía, lo revisen y lo publiquen para consulta privada del paciente. El CRM no autentica médicos ni almacena informes.
 
-**Estado:** backend y portal independiente Next implementados y probados localmente. No desplegados. El portal está en `portal/` y conserva la identidad visual de la web institucional. WhatsApp viene desactivado; no se ha enviado ningún mensaje ni solicitado aprobación de una plantilla desde este proyecto.
+**Estado:** backend y portal independiente Next desplegados y verificados en https://resultados.107.175.132.15.nip.io/. El portal está en `portal/` y conserva la identidad visual de la web institucional. WhatsApp viene desactivado; no se ha enviado ningún mensaje ni solicitado aprobación de una plantilla desde este proyecto.
 
 ## Arquitectura y alcance
 
@@ -34,9 +34,9 @@ Requisitos: Node 22.12+ (recomendado 24), npm, PostgreSQL. No usar la base, el u
 6. Crear el primer administrador con `npm run usuario -- admin@tu-dominio.com "Administrador" ADMIN`. La contraseña se lee de stdin (12–128 caracteres); en una terminal usar entrada oculta o un gestor de secretos, nunca argumentos ni historial del shell.
 7. `npm start` y, en otro proceso, `npm run worker`.
 
-API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` comprueba PostgreSQL. El portal está en `portal/` y utiliza el puerto 3011. Consulta [su arranque](portal/README.md). Las URL de ejemplo son locales; todavía no hay un sitio clínico desplegado.
+API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` comprueba PostgreSQL. El portal está en `portal/` y utiliza el puerto 3011. Consulta [su arranque](portal/README.md). Las URL de ejemplo son locales. La instalación del servidor usa HTTPS, PDFs cifrados y antivirus.
 
-`STORAGE_DRIVER=local` guarda PDFs en `var/private`, fuera de recursos públicos. Sin ClamAV solo se permite desarrollo; producción exige `STORAGE_DRIVER=r2` y `CLAMAV_HOST`. Nunca usar PDFs clínicos reales en desarrollo sin el entorno adecuado.
+`STORAGE_DRIVER=local` guarda PDFs en `var/private`, fuera de recursos públicos. Sin ClamAV solo se permite desarrollo; producción exige R2 privado o `STORAGE_DRIVER=local-encrypted` con clave AES-256-GCM y `CLAMAV_HOST`. Nunca usar PDFs clínicos reales en desarrollo sin el entorno adecuado.
 
 ## Flujo ya disponible
 

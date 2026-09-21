@@ -5,8 +5,10 @@ import { Access, Config, Report, User, dateLabel, reportLabels } from '@/lib/typ
 import NewReport from './NewReport';
 import ReportDetail from './ReportDetail';
 import NewUser from './NewUser';
+import PasswordForm from './PasswordForm';
 import { Feedback, message } from './shared';
 export default function DoctorPortal() {
+  const [passwordScreen, setPasswordScreen] = useState(false);
   const [user, setUser] = useState<User | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
@@ -152,7 +154,7 @@ export default function DoctorPortal() {
   return (
     <div className="workspace">
       <div className="toolbar">
-        <span>{user.nombre}</span>
+        <span>{user.nombre}</span><button disabled={busy} onClick={() => setPasswordScreen(true)}>Cambiar contraseña</button>
         <button
           disabled={busy}
           onClick={async () => {
@@ -173,7 +175,7 @@ export default function DoctorPortal() {
           Cerrar sesión
         </button>
       </div>
-      {selected ? (
+      {passwordScreen ? <PasswordForm onBack={() => setPasswordScreen(false)} onChanged={() => { setUser(null); setSelected(null); setAccess(null); setReports([]); setPasswordScreen(false); }} /> : selected ? (
         <ReportDetail
           key={selected.id}
           report={selected}

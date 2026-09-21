@@ -55,6 +55,19 @@ export class AuthService {
     if (password.length < 12 || password.length > 128) problem(400, 'CONTRASENA_INVALIDA', 'Usa una contraseña de entre 12 y 128 caracteres.');
     return this.db.usuario.create({ data: { email: email.trim().toLowerCase(), nombre, rol, passwordHash: await hashPassword(password) }, select: { id: true, email: true, nombre: true, rol: true, activo: true } });
   }
+  async changePassword(actor: Actor, actual: string, nueva: string) {
+    const user = await this.db.usuario.findUniqueOrThrow({ where: { id: actor.id } });
+    if (!await verifyPassword(actual, user.passwordHash)) problem(400, 'CONTRASENA_INCORRECTA', 'La contraseña actual no es correcta.');
+    if (actual === nueva) problem(400, 'CONTRASENA_REPETIDA', 'Elige una contraseña diferente a la actual.');
+    const passwordHash = await hashPassword(nueva);
+    await this.db.$transaction(async tx => {
+      const updated = await tx.usuario.updateMany({ where: { id: actor.id, passwordHash: user.passwordHash }, data: { passwordHash } });
+      if (!updated.count) problem(409, 'CUENTA_CAMBIO', 'La cuenta cambió. Vuelve a ingresar.');
+      await tx.sesion.deleteMany({ where: { usuarioId: actor.id } });
+      await tx.auditoria.create({ data: { actorId: actor.id, accion: 'CONTRASENA_CAMBIADA' } });
+    });
+    return { cerrado: true };
+  }
   async disableUser(id: string, actor: Actor) {
     if (actor.rol !== 'ADMIN' || actor.id === id) problem(403, 'ACCION_NO_PERMITIDA', 'Esta acción requiere otro administrador.');
     return this.db.$transaction(async tx => {

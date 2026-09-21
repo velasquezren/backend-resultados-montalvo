@@ -8,7 +8,7 @@ Este repositorio no configura dominios, infraestructura, facturación ni proveed
 2. Crear bucket R2 privado sin dominio público/r2.dev. Credencial limitada a ese bucket; nunca usar claves de la cuenta principal en Next. Mantener copias/restauración de PDF coordinadas con la base y acordar retención con la clínica. No borrar informes por edad automáticamente.
 3. Instalar ClamAV actualizado en red privada. Su puerto TCP no ofrece autenticación propia: no exponer 3310 a Internet. Configurar límites de análisis al menos iguales a los PDF admitidos, detectar archivos que exceden límites y actualizar firmas con freshclam. Comprobar archivo limpio, detección de prueba y caída del servicio.
 4. Configurar HTTPS, CORS exacto, clave HMAC, URL real del portal y credenciales independientes. Reverse proxy local compatible con `trust proxy=loopback`; si es remoto, configurar explícitamente los proxies confiables antes de usar límites por IP.
-5. Ejecutar migración una sola vez antes de iniciar nuevas instancias. `NODE_ENV=production` obliga R2 y ClamAV; no desactivarlo para eludir un fallo de configuración.
+5. Ejecutar migración una sola vez antes de iniciar nuevas instancias. `NODE_ENV=production` obliga R2 privado o disco cifrado, y ClamAV; no desactivarlo para eludir un fallo de configuración.
 6. Iniciar API y worker como procesos distintos, usuario sin privilegios, reinicio supervisado y límites de CPU/RAM. El API no ejecuta la cola al recibir una petición.
 7. Crear usuarios individuales. Probar médico A/B, paciente, sesión vencida, código renovado y retiro. No reutilizar la cuenta de recepción del CRM.
 8. Configurar y desplegar el portal Next de `portal/`. Comprobar que ninguna ruta privada esté en sitemap/robots indexable, caché compartida o analítica. El backend por sí solo no hace accesible la pantalla del enlace.
@@ -68,3 +68,14 @@ El código no elimina PDFs históricos automáticamente. Un archivo puede quedar
 Pruebas automáticas con PostgreSQL y HTTP locales, transporte de avisos simulado y PDFs sintéticos. No se probó entrega real, almacenamiento R2 real, ClamAV real, restauración productiva, Docker en producción ni carga masiva. El portal Next cuenta con pruebas locales de navegador con datos sintéticos. La preparación del backend no equivale a autorización de puesta en marcha.
 
 Referencias técnicas: [carga de archivos en Nest](https://docs.nestjs.com/techniques/file-upload), [guía OWASP de archivos](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html), [operación de ClamAV](https://docs.clamav.net/manual/Usage/Scanning.html), [URLs firmadas de R2](https://developers.cloudflare.com/r2/api/s3/presigned-urls/).
+
+
+## Disco privado cifrado del servidor
+
+Alternativa autorizada para esta instalación: `STORAGE_DRIVER=local-encrypted`, `PRIVATE_STORAGE_DIR` absoluta fuera de cualquier raíz web y `STORAGE_ENCRYPTION_KEY` exclusiva de 32 bytes hexadecimales. Cada PDF usa AES-256-GCM, nonce aleatorio y autenticación vinculada a su clave de archivo. Alterar bytes, renombrar un objeto o usar otra clave hace fallar la lectura. No reutilizar la clave de sesiones ni cambiarla sin migrar los documentos.
+
+El proceso API escucha en loopback, con usuario del sistema propio y directorio privado. El portal tiene otro usuario y no lee archivos/credenciales del API. ClamAV escucha solo en loopback. Los servicios tienen límites de memoria y CPU. Esta modalidad permite comenzar sin configurar R2; una migración posterior a R2 exige trasladar/verificar los objetos, no solo cambiar la variable.
+
+Endpoint de cambio de contraseña: POST `/v1/auth/password`, cuerpo `{actual,nueva}`; requiere sesión, valida la contraseña actual y revoca todas las sesiones al guardar. Disponible en el portal. El primer administrador recibe una contraseña aleatoria mediante un archivo local protegido, fuera del repositorio.
+
+Las copias del servidor complementan los archivos privados; una copia en el mismo VPS no protege contra la pérdida del VPS. Conservar las claves y una copia externa fuera del servidor antes de acumular informes. El enlace `nip.io` es provisional y debe sustituirse por un subdominio propio cuando esté disponible.

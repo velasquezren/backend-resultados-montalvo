@@ -1,13 +1,14 @@
 import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } from '@nestjs/common';
 import { AwsClient } from 'aws4fetch';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect } from 'node:net';
 import { PDFArray, PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { finalize } from 'rxjs';
 import { CONFIG, AppConfig } from '../config';
 import { problem } from '../errors';
+import { sealPdf, openPdf } from './encryption';
 
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const forbidden = new Set(['JS', 'JavaScript', 'AA', 'OpenAction', 'Launch', 'EmbeddedFiles', 'EmbeddedFile', 'RichMedia', 'XFA', 'AcroForm']);
@@ -84,12 +85,17 @@ export class PrivateFiles {
       await response.body?.cancel();
     } else {
       await mkdir(this.config.privateDir, { recursive: true, mode: 0o700 });
-      await writeFile(join(this.config.privateDir, key), buffer, { mode: 0o600, flag: 'wx' });
+      await writeFile(join(this.config.privateDir, key), this.config.storageKey ? sealPdf(buffer, this.config.storageKey, key) : buffer, { mode: 0o600, flag: 'wx' });
     }
   }
   async get(key: string): Promise<Buffer> {
     this.key(key);
-    if (!this.client) return readFile(join(this.config.privateDir, key));
+    if (!this.client) {
+      const path = join(this.config.privateDir, key);
+      if ((await stat(path)).size > MAX_PDF_BYTES + 33) throw new Error('archivo_tamano_invalido');
+      const value = await readFile(path);
+      return this.config.storageKey ? openPdf(value, this.config.storageKey, key) : value;
+    }
     const signed = await this.client.sign(`${this.endpoint}/${key}`);
     const response = await fetch(signed, { signal: AbortSignal.timeout(30_000) });
     if (!response.ok || Number(response.headers.get('content-length') ?? 0) > MAX_PDF_BYTES) problem(503, 'PDF_NO_DISPONIBLE', 'No pudimos cargar el documento. Intenta de nuevo en unos momentos.');

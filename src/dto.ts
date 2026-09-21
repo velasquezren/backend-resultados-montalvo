@@ -61,3 +61,8 @@ export class NotificarDto extends RevisionDto {
   @Equals(true) consentimientoWhatsApp!: true;
   @IsString() @Length(1, 40) consentimientoVersion!: string;
 }
+
+export class PasswordDto {
+  @IsString() @Length(1, 128) actual!: string;
+  @IsString() @Length(12, 128) nueva!: string;
+}

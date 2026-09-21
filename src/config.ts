@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -18,8 +18,11 @@ export function readConfig() {
   const origins = required('CORS_ORIGINS').split(',').map(value => new URL(value.trim()).origin);
   if (production && origins.some(value => !value.startsWith('https://'))) throw new Error('CORS debe usar HTTPS');
   const storage = process.env.STORAGE_DRIVER ?? 'local';
-  if (!['local', 'r2'].includes(storage)) throw new Error('STORAGE_DRIVER inválido');
-  if (production && (storage !== 'r2' || !process.env.CLAMAV_HOST)) throw new Error('Producción requiere R2 privado y ClamAV');
+  if (!['local', 'local-encrypted', 'r2'].includes(storage)) throw new Error('STORAGE_DRIVER inválido');
+  if (production && (storage === 'local' || !process.env.CLAMAV_HOST)) throw new Error('Producción requiere almacenamiento privado protegido y ClamAV');
+  const storageKey = storage === 'local-encrypted' ? required('STORAGE_ENCRYPTION_KEY') : undefined;
+  if (storageKey && !/^[a-f0-9]{64}$/i.test(storageKey)) throw new Error('STORAGE_ENCRYPTION_KEY debe tener 32 bytes hexadecimales');
+  if (production && storage === 'local-encrypted' && !isAbsolute(required('PRIVATE_STORAGE_DIR'))) throw new Error('El almacenamiento de producción requiere ruta absoluta privada');
   const notifications = process.env.NOTIFICATIONS_ENABLED === 'true';
   const dailyLimit = Number(process.env.NOTIFICATION_DAILY_LIMIT ?? 100);
   if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 10000) throw new Error('NOTIFICATION_DAILY_LIMIT inválido');
@@ -27,7 +30,7 @@ export function readConfig() {
   if (storage === 'r2') for (const key of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) required(key);
   const port = Number(process.env.PORT ?? 3010);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT inválido');
-  return { production, databaseUrl, hmacKey, origins, port, storage, notifications, dailyLimit,
+  return { production, databaseUrl, hmacKey, origins, port, storage, storageKey, notifications, dailyLimit,
     portalUrl: portal.href.replace(/\/$/, ''), privateDir: resolve(process.env.PRIVATE_STORAGE_DIR ?? 'var/private'),
   };
 }

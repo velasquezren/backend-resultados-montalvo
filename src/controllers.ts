@@ -6,7 +6,7 @@ import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth'
 import { equalSecret } from './auth/crypto';
 import { CONFIG, AppConfig } from './config';
 import { Database } from './database';
-import { BuscarPacienteDto, CodigoDto, CrearInformeDto, EventosDto, ListarDto, LoginDto, NotificarDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
+import { BuscarPacienteDto, CodigoDto, CrearInformeDto, EventosDto, ListarDto, LoginDto, PasswordDto, NotificarDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
 import { MAX_PDF_BYTES, UploadCapacity } from './files/files';
 import { Notifications } from './notifications/notifications';
@@ -39,6 +39,7 @@ export class AuthController {
   login(@Body() body: LoginDto, @Req() req: Request) { return this.auth.login(body.email, body.password, req.ip ?? 'unknown'); }
   @Get('yo') me(@Req() req: AuthRequest) { return this.db.usuario.findUnique({ where: { id: req.actor.id }, select: { id: true, nombre: true, email: true, rol: true } }); }
   @Post('logout') @HttpCode(200) async logout(@Req() req: AuthRequest) { await this.db.sesion.deleteMany({ where: { id: req.sesionId } }); return { cerrado: true }; }
+  @Post('password') @HttpCode(200) password(@Req() req: AuthRequest, @Body() dto: PasswordDto) { return this.auth.changePassword(req.actor, dto.actual, dto.nueva); }
   @Post('usuarios') async create(@Req() req: AuthRequest, @Body() dto: UserDto) {
     if (req.actor.rol !== 'ADMIN') problem(403, 'ADMIN_REQUERIDO', 'Solo un administrador puede crear cuentas.');
     return this.auth.createUser(dto.email, dto.nombre, dto.password, dto.rol);

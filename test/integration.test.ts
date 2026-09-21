@@ -253,3 +253,14 @@ test('autorizar WhatsApp exige confirmar teléfono y no admite confirmación imp
   assert.equal(result.status, 400);
   assert.equal((await db.informe.findUniqueOrThrow({ where: { id: report.informe.id } })).estado, 'BORRADOR');
 });
+
+test('cambiar contraseña revoca sesiones y exige conocer la contraseña anterior', async () => {
+  const auth = app.get(AuthService);
+  await auth.createUser('cambio@prueba.test', 'Cambio', 'clave-inicial-pruebas', 'MEDICO');
+  const login = await api<{token:string}>('/v1/auth/login', 'POST', { email:'cambio@prueba.test', password:'clave-inicial-pruebas' });
+  assert.equal((await api('/v1/auth/password','POST',{actual:'incorrecta',nueva:'clave-nueva-pruebas'},login.data.token)).status,400);
+  assert.equal((await api('/v1/auth/password','POST',{actual:'clave-inicial-pruebas',nueva:'clave-nueva-pruebas'},login.data.token)).status,200);
+  assert.equal((await api('/v1/auth/yo','GET',undefined,login.data.token)).status,401);
+  assert.equal((await api('/v1/auth/login','POST',{email:'cambio@prueba.test',password:'clave-inicial-pruebas'})).status,401);
+  assert.equal((await api('/v1/auth/login','POST',{email:'cambio@prueba.test',password:'clave-nueva-pruebas'})).status,200);
+});

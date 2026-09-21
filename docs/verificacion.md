@@ -22,3 +22,17 @@ Portal Next en `portal/`, compilación de producción correcta y TypeScript estr
 Prueba de navegador local (Chromium, escritorio 1365×900 y móvil 390×844): iniciar sesión de administrador sintético, buscar CI inexistente, registrar paciente sintético, crear borrador, adjuntar PDF sintético, revisar/publicar, abrir enlace como paciente, descargar bytes idénticos y retirar con revocación efectiva. Sin errores de JavaScript del navegador. Verificado: cookie HttpOnly/SameSite Strict, token no disponible en `document.cookie`, localStorage vacío, CSRF rechazado, eventos CRM fuera del proxy, sesión del paciente sin acceso médico, ausencia de overflow horizontal y diálogo móvil de altura completa.
 
 Las pruebas de navegador se ejecutaron localmente contra HTTP/PostgreSQL reales; los proveedores clínicos externos y el despliegue HTTPS siguen pendientes. GitHub Actions incluye las 27 pruebas backend y las 3 de política del portal, además de las compilaciones; no incluye automáticamente el recorrido de navegador descrito arriba.
+
+
+## Preparación de despliegue: almacenamiento y cuentas
+
+29 pruebas backend aprobadas (27 previas + cifrado autenticado + cambio de contraseña con revocación). Compilación backend y portal correctas. Recorrido de navegador repetido en escritorio/móvil con datos sintéticos antes de desplegar. ClamAV, TLS y comprobaciones en servidor se registrarán por separado al completar la puesta en marcha.
+
+
+## Puesta en marcha comprobada
+
+Portal público: https://resultados.107.175.132.15.nip.io/. Verificación HTTPS desde el servidor y desde fuera. Cuenta inicial `doctor@montalvo.com` con rol ADMIN. PDF sintético cargado a través del proxy público, examinado por ClamAV real, cifrado en disco (cabecera MNTV1), publicado y descargado con bytes idénticos. Retiro revocó acceso; datos/archivo sintéticos se eliminaron al terminar. Patrón EICAR de prueba rechazado por el antivirus. Cookies HttpOnly/Secure y CSRF comprobados. WhatsApp sigue desactivado.
+
+ClamAV usa activación por socket de systemd en Debian: se añadió un listener exclusivamente 127.0.0.1:3310. API y Next también escuchan solo en loopback; Apache publica el portal con certificado válido. El servidor mantiene activo el CRM original.
+
+Copias diarias cifradas configuradas; verificación de contenedores con pg_restore --list y tar. Esto no sustituye un ensayo completo de recuperación ni una copia externa recurrente. Las claves y la contraseña inicial no forman parte del repositorio.
