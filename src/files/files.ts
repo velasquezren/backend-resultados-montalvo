@@ -1,17 +1,29 @@
-import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { AwsClient } from 'aws4fetch';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect } from 'node:net';
-import { PDFArray, PDFDict, PDFDocument, PDFName } from 'pdf-lib';
-import { finalize } from 'rxjs';
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef } from 'pdf-lib';
 import { CONFIG, AppConfig } from '../config';
 import { problem } from '../errors';
 import { sealPdf, openPdf } from './encryption';
 
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
-const forbidden = new Set(['JS', 'JavaScript', 'AA', 'OpenAction', 'Launch', 'EmbeddedFiles', 'EmbeddedFile', 'RichMedia', 'XFA', 'AcroForm']);
+/**
+ * Nombres que no deben llegar al visor ni almacenarse como parte del informe.
+ *
+ * `OpenAction` no está en esta lista porque FileMaker lo usa para guardar un
+ * destino de navegación de la primera página. Se valida aparte: solo se
+ * permite la forma array de destino (`[página /XYZ ...]`), nunca un diccionario
+ * de acción que pudiera ejecutar JavaScript, abrir archivos o hacer una
+ * petición externa.
+ */
+const forbidden = new Set([
+  'JS', 'JavaScript', 'AA', 'Launch', 'EmbeddedFiles', 'EmbeddedFile',
+  'RichMedia', 'XFA', 'AcroForm', 'Widget', 'FileAttachment', 'Movie',
+  'Sound', '3D', 'SubmitForm', 'ResetForm',
+]);
 
 export async function validatePdf(buffer: Buffer): Promise<{ paginas: number; sha256: string }> {
   if (buffer.length === 0 || buffer.length > MAX_PDF_BYTES) problem(413, 'PDF_TAMANO_INVALIDO', 'Adjunta un PDF de hasta 10 MB.');
@@ -26,7 +38,22 @@ export async function validatePdf(buffer: Buffer): Promise<{ paginas: number; sh
     if (seen.has(value)) return;
     seen.add(value);
     if (value instanceof PDFName && forbidden.has(value.decodeText())) problem(400, 'PDF_CONTENIDO_ACTIVO', 'Exporta el informe como PDF simple, sin formularios, scripts ni archivos adjuntos.');
-    if (value instanceof PDFDict) for (const [key, child] of value.entries()) { inspect(key); inspect(child); }
+    if (value instanceof PDFDict) for (const [key, child] of value.entries()) {
+      const nombre = key instanceof PDFName ? key.decodeText() : undefined;
+      if (nombre === 'OpenAction') {
+        /* FileMaker Pro 19.x writes `[page /XYZ null null 1]`. A PDF action
+           dictionary is deliberately rejected, even if it happens to use the
+           same catalog key, because it may contain `/S /JavaScript`, `/Launch`
+           or another active action. Indirect arrays are resolved before the
+           shape check. */
+        const destino = child instanceof PDFRef ? pdf.context.lookup(child) : child;
+        if (!(destino instanceof PDFArray)) problem(400, 'PDF_CONTENIDO_ACTIVO', 'Exporta el informe como PDF simple, sin formularios, scripts ni archivos adjuntos.');
+        inspect(destino);
+      } else {
+        inspect(key);
+        inspect(child);
+      }
+    }
     else if (value instanceof PDFArray) for (const child of value.asArray()) inspect(child);
     else if (value && typeof value === 'object' && 'dict' in value) inspect(value.dict);
   }
@@ -116,16 +143,5 @@ export class PrivateFiles {
     const response = await fetch(signed, { signal: AbortSignal.timeout(10_000) });
     if (!response.ok && response.status !== 404) throw new Error('archivo_no_eliminado');
     await response.body?.cancel();
-  }
-}
-
-/** El límite incluye Multer: máximo dos PDFs en memoria por proceso. */
-@Injectable()
-export class UploadCapacity implements NestInterceptor {
-  private active = 0;
-  intercept(_context: ExecutionContext, next: CallHandler) {
-    if (this.active >= 2) problem(503, 'CARGA_OCUPADA', 'Estamos procesando otros archivos. Espera unos segundos y vuelve a adjuntar el PDF.');
-    this.active++;
-    return next.handle().pipe(finalize(() => { this.active--; }));
   }
 }

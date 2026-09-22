@@ -30,6 +30,13 @@ test('rechaza extensiones falsas, PDFs vacíos y JavaScript dentro de un PDF vá
   pdf.catalog.set(PDFName.of('OpenAction'), pdf.context.obj({ S: PDFName.of('JavaScript'), JS: PDFString.of('app.alert(1)') }));
   await assert.rejects(validatePdf(Buffer.from(await pdf.save())));
 });
+test('acepta el destino de página que FileMaker añade al exportar', async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  pdf.catalog.set(PDFName.of('OpenAction'), pdf.context.obj([pdf.getPage(0).ref, PDFName.of('XYZ'), null, null, 1]));
+  const result = await validatePdf(Buffer.from(await pdf.save()));
+  assert.equal(result.paginas, 1);
+});
 test('la configuración rechaza explícitamente la base del CRM', () => {
   const before = process.env.RESULTADOS_DATABASE_URL;
   process.env.RESULTADOS_DATABASE_URL = 'postgresql://local@localhost/crm';

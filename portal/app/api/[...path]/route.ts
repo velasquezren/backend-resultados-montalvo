@@ -3,7 +3,6 @@ import { isIP } from "node:net";
 import { allowed, sameOrigin } from "@/lib/proxy-policy";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-let uploads = 0;
 const noStore = {
   "Cache-Control": "no-store, private",
   "Referrer-Policy": "no-referrer",
@@ -48,12 +47,6 @@ async function handler(
   const multipart =
     request.headers.get("content-type")?.startsWith("multipart/form-data") ??
     false;
-  if (multipart && uploads >= 2)
-    return error(
-      503,
-      "Estamos procesando otros archivos. Espera unos segundos y vuelve a intentar.",
-    );
-  if (multipart) uploads++;
   try {
     const headers: Record<string, string> = {};
     if (token && !login) headers.Authorization = `Bearer ${token}`;
@@ -142,8 +135,6 @@ async function handler(
       503,
       "No pudimos confirmar la operación. Revisa el estado antes de repetirla.",
     );
-  } finally {
-    if (multipart) uploads--;
   }
 }
 export { handler as GET, handler as POST };

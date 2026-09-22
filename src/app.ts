@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import { CONFIG, readConfig } from './config';
 import { Database } from './database';
 import { Attempts, AuthGuard, AuthService } from './auth/auth';
-import { PrivateFiles, PdfScanner, UploadCapacity } from './files/files';
+import { PrivateFiles, PdfScanner } from './files/files';
 import { Results } from './results/results';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
@@ -19,7 +19,7 @@ import { ApiErrors } from './errors';
   controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, MetaWebhookController, CrmEventsController],
   providers: [
     { provide: CONFIG, useFactory: readConfig }, Database, Attempts, AuthService,
-    { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner, UploadCapacity,
+    { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner,
     Patients, Results, PatientPortal, Notifications, { provide: TRANSPORT, useClass: MetaTransport },
   ],
 })

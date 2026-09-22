@@ -8,7 +8,7 @@ import { CONFIG, AppConfig } from './config';
 import { Database } from './database';
 import { BuscarPacienteDto, CodigoDto, CrearInformeDto, EventosDto, ListarDto, LoginDto, PasswordDto, NotificarDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
-import { MAX_PDF_BYTES, UploadCapacity } from './files/files';
+import { MAX_PDF_BYTES } from './files/files';
 import { Notifications } from './notifications/notifications';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
@@ -62,7 +62,7 @@ export class ResultsController {
   @Post() create(@Body() dto: CrearInformeDto, @Req() req: AuthRequest) { return this.results.create(dto, req.actor); }
   @Get(':id') get(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) { return this.results.get(id, req.actor); }
   @Post(':id/pdf')
-  @UseInterceptors(UploadCapacity, FileInterceptor('archivo', { limits: { fileSize: MAX_PDF_BYTES, files: 1, fields: 1, parts: 2 } }))
+  @UseInterceptors(FileInterceptor('archivo', { limits: { fileSize: MAX_PDF_BYTES, files: 1, fields: 1, parts: 2 } }))
   async upload(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RevisionDto, @UploadedFile() file: Express.Multer.File | undefined, @Req() req: AuthRequest) {
     await this.attempts.consume('upload-medico', req.actor.id, 30, 60);
     if (!file || file.mimetype !== 'application/pdf') problem(400, 'PDF_REQUERIDO', 'Adjunta el informe como archivo PDF.');
