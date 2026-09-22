@@ -361,3 +361,22 @@ test('la cola del CRM lista informes publicados vinculados, sin filtrar el códi
   const despues = await api<{ datos: Fila[] }>('/v1/integraciones/crm/informes?limite=100', 'GET', undefined, 'c'.repeat(40));
   assert.equal(despues.data.datos.some(item => item.informeId === informe.informe.id), false);
 });
+
+test('la cola del CRM permite revalidar un solo informe antes de enviarlo', async () => {
+  const uno = await ready(); assert.equal((await publish(uno.informe)).status, 200);
+  const otro = await ready(); assert.equal((await publish(otro.informe)).status, 200);
+  type Fila = { informeId: string; accesoId: string; accesoVigente: boolean };
+  const solo = await api<{ datos: Fila[]; total: number }>(`/v1/integraciones/crm/informes?informeId=${uno.informe.id}`, 'GET', undefined, 'c'.repeat(40));
+  assert.equal(solo.status, 200);
+  assert.equal(solo.data.total, 1);
+  assert.equal(solo.data.datos[0]!.informeId, uno.informe.id);
+  assert.equal(solo.data.datos[0]!.accesoVigente, true);
+
+  // Un id que no es UUID se rechaza antes de tocar la base.
+  assert.equal((await api('/v1/integraciones/crm/informes?informeId=no-es-uuid', 'GET', undefined, 'c'.repeat(40))).status, 400);
+
+  // Revocar el acceso se refleja: el CRM no debe mandar a una puerta cerrada.
+  await db.accesoPaciente.updateMany({ where: { informeId: uno.informe.id }, data: { revocadoEn: new Date() } });
+  const tras = await api<{ datos: Fila[] }>(`/v1/integraciones/crm/informes?informeId=${uno.informe.id}`, 'GET', undefined, 'c'.repeat(40));
+  assert.equal(tras.data.datos[0]!.accesoVigente, false);
+});

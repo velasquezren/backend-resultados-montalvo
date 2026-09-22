@@ -44,7 +44,7 @@ export class Results {
    * mande a un paciente a una puerta cerrada.
    */
   async publishedForCrm(dto: InformesCrmDto) {
-    const where: Prisma.InformeWhereInput = { estado: 'PUBLICADO', paciente: { referenciaCrm: { not: null } }, acceso: { isNot: null } };
+    const where: Prisma.InformeWhereInput = { estado: 'PUBLICADO', paciente: { referenciaCrm: { not: null } }, acceso: { isNot: null }, ...(dto.informeId ? { id: dto.informeId } : {}) };
     const [filas, total] = await this.db.$transaction([
       this.db.informe.findMany({
         where,

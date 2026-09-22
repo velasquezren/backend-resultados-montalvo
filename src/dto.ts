@@ -53,6 +53,8 @@ export class ListarDto {
 export class InformesCrmDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) pagina = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite = 50;
+  /** Un solo informe: el CRM revalida contra el portal justo antes de enviar. */
+  @IsOptional() @IsUUID() informeId?: string;
 }
 export class CodigoDto {
   @IsString() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.toUpperCase().replace(/[ -]/g, '') : value)
