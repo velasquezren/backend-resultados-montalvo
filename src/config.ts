@@ -23,6 +23,11 @@ export function readConfig() {
   const storageKey = storage === 'local-encrypted' ? required('STORAGE_ENCRYPTION_KEY') : undefined;
   if (storageKey && !/^[a-f0-9]{64}$/i.test(storageKey)) throw new Error('STORAGE_ENCRYPTION_KEY debe tener 32 bytes hexadecimales');
   if (production && storage === 'local-encrypted' && !isAbsolute(required('PRIVATE_STORAGE_DIR'))) throw new Error('El almacenamiento de producción requiere ruta absoluta privada');
+  // Un typo aquí elegiría en silencio la variante equivocada de plantilla y
+  // haría fallar cada envío, así que se rechaza cualquier valor que no sea
+  // exactamente true o false.
+  const boton = process.env.WHATSAPP_TEMPLATE_BOTON;
+  if (boton !== undefined && !['true', 'false'].includes(boton)) throw new Error('WHATSAPP_TEMPLATE_BOTON debe ser true o false');
   const notifications = process.env.NOTIFICATIONS_ENABLED === 'true';
   const dailyLimit = Number(process.env.NOTIFICATION_DAILY_LIMIT ?? 100);
   if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 10000) throw new Error('NOTIFICATION_DAILY_LIMIT inválido');

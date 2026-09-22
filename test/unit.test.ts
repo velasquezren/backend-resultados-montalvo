@@ -58,3 +58,50 @@ test('cifrado autenticado: confidencialidad, nonce único, integridad y vínculo
   assert.throws(() => openPdf(changed, key, 'objeto-a'));
   assert.throws(() => openPdf(pdf, key, 'objeto-a'));
 });
+
+import { templatePayload } from '../src/notifications/meta';
+test('la plantilla se arma según la variante aprobada, con botón y sin él', () => {
+  const claves = ['WHATSAPP_TEMPLATE', 'WHATSAPP_TEMPLATE_LANGUAGE', 'WHATSAPP_TEMPLATE_BOTON', 'RESULTADOS_DATABASE_URL', 'SESSION_HMAC_KEY', 'PATIENT_PORTAL_URL', 'CORS_ORIGINS'] as const;
+  const previos = Object.fromEntries(claves.map(clave => [clave, process.env[clave]]));
+  const entrada = { id: 'aviso-1', intento: 1, telefono: '+59170000000', accesoId: '3d300296-db32-4238-85e4-58d02aeb534a' };
+  try {
+    process.env.WHATSAPP_TEMPLATE = 'montalvo_resultado_disponible';
+    delete process.env.WHATSAPP_TEMPLATE_LANGUAGE;
+
+    // Variante A: por omisión lleva el botón URL en índice 0 con el ID de acceso.
+    delete process.env.WHATSAPP_TEMPLATE_BOTON;
+    const conBoton = templatePayload(entrada);
+    assert.deepEqual(conBoton, {
+      name: 'montalvo_resultado_disponible',
+      language: { code: 'es' },
+      components: [{ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: entrada.accesoId }] }],
+    });
+
+    // El código de acceso NUNCA viaja en el mensaje: solo el identificador.
+    assert.equal(JSON.stringify(conBoton).includes('codigo'), false);
+
+    // Variante B: sin botón no se manda ningún componente, o Meta rechazaría el envío.
+    process.env.WHATSAPP_TEMPLATE_BOTON = 'false';
+    const sinBoton = templatePayload(entrada);
+    assert.deepEqual(sinBoton, { name: 'montalvo_resultado_disponible', language: { code: 'es' } });
+    assert.equal('components' in sinBoton, false);
+    assert.equal(JSON.stringify(sinBoton).includes(entrada.accesoId), false);
+
+    // Un valor que no sea true/false es un typo y debe fallar al arrancar.
+    // `readConfig` valida en orden, así que hay que darle lo previo para llegar aquí.
+    Object.assign(process.env, {
+      RESULTADOS_DATABASE_URL: 'postgresql://local@localhost/resultados_prueba',
+      SESSION_HMAC_KEY: 'ab'.repeat(32),
+      PATIENT_PORTAL_URL: 'http://localhost:3000/resultados',
+      CORS_ORIGINS: 'http://localhost:3000',
+    });
+    assert.doesNotThrow(readConfig, 'el entorno base debe ser válido antes de probar el typo');
+    process.env.WHATSAPP_TEMPLATE_BOTON = 'fasle';
+    assert.throws(readConfig, /WHATSAPP_TEMPLATE_BOTON/);
+  } finally {
+    for (const clave of claves) {
+      const valor = previos[clave];
+      if (valor === undefined) delete process.env[clave]; else process.env[clave] = valor;
+    }
+  }
+});

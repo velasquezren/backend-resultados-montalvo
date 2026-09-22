@@ -47,6 +47,22 @@ Cerrar con «responde a este mensaje» no es adorno: es el patrón con el que la
 
 **Riesgo conocido**: el botón apunta a un dominio comodín sobre IP (`nip.io`). Es el elemento con más probabilidad de rechazo y el que peor lee un paciente. Al adoptar un subdominio propio habrá que **editar la plantilla**, lo que la devuelve a revisión y reinicia su calificación de calidad: conviene tener el dominio definitivo antes de enviarla a aprobar. Si la rechazan, la variante sin botón —mismo cuerpo, sin enlace, resolviendo por respuesta dentro de la ventana de 24 h— tiene el precedente de las tres ya aprobadas.
 
+### Variante B — sin botón, si Meta rechaza el enlace
+
+Mismo nombre base con sufijo `_sin_enlace`, misma categoría e idioma, **sin botón y sin variables**:
+
+> Clínica Montalvo: tu informe médico ya está disponible.
+>
+> Responde a este mensaje y te enviamos el enlace para consultarlo. Necesitarás el código de 12 caracteres que te entregamos en la clínica.
+
+Pie igual: `No compartas tu código con nadie.`
+
+Para enviarla hay que poner `WHATSAPP_TEMPLATE_BOTON=false`. `templatePayload` omite entonces el componente de botón: mandar un componente que la plantilla aprobada no tiene hace fallar el envío por número de parámetros, igual que omitir el que sí tiene. La variable solo admite `true` o `false`; cualquier otro valor detiene el arranque, para que un typo no elija en silencio la forma equivocada.
+
+**El coste de esta variante es que deja de ser automática.** El paciente no recibe el enlace en el mensaje: responde, ese mensaje entra por el webhook del CRM —que es quien tiene la línea— y recepción le pasa el enlace a mano dentro de la ventana de 24 horas. Recepción tendrá que buscar el acceso en Resultados, porque el UUID no viaja al CRM mientras no exista el consumidor de eventos descrito en `arquitectura.md`.
+
+No existe una pantalla donde el paciente entre solo con su código: el enlace identifica el acceso y el código lo autoriza. Convertir el código en credencial global cambiaría ese modelo y permitiría enumerar accesos; no hacerlo sin decidirlo explícitamente.
+
 La [política de WhatsApp](https://business.whatsapp.com/policy) exige los permisos aplicables para contactar y plantillas aprobadas para iniciar conversaciones conforme a sus reglas; no hace falta obligar al paciente a escribir primero cuando se cumple ese flujo. La [tarificación oficial](https://business.whatsapp.com/products/platform-pricing) depende de categoría y mercado: no se fija un precio inventado en bolivianos.
 
 ## Elegir línea y activar
