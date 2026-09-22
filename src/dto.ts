@@ -22,6 +22,8 @@ export class PacienteDto {
 export class BuscarPacienteDto {
   @IsOptional() @IsString() @Length(3, 40) ci?: string;
   @IsOptional() @IsString() @Length(2, 40) pac?: string;
+  /** Un solo campo para quien no sabe si el paciente es de CI o de PAC. */
+  @IsOptional() @IsString() @Length(2, 40) @Matches(/^[A-Z0-9 .-]+$/i) identificador?: string;
 }
 export class CrearInformeDto {
   @IsUUID() pacienteId!: string;
@@ -46,6 +48,7 @@ export class ListarDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite = 25;
   @IsOptional() @IsEnum(EstadoInforme) estado?: EstadoInforme;
   @IsOptional() @IsUUID() pacienteId?: string;
+  @IsOptional() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(2, 160) buscar?: string;
 }
 export class CodigoDto {
   @IsString() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.toUpperCase().replace(/[ -]/g, '') : value)

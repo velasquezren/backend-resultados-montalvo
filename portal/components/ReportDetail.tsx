@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useRef, useState } from 'react';
-import { api, ApiError } from '@/lib/client';
+import { api, ApiError, upload as uploadWithProgress } from '@/lib/client';
 import { Access, Config, Report, dateLabel, notificationLabels, reportLabels } from '@/lib/types';
 import { Feedback, AccessCard, message } from './shared';
 export default function ReportDetail({
@@ -24,7 +24,8 @@ export default function ReportDetail({
     [notify, setNotify] = useState(false),
     [phone, setPhone] = useState(false),
     [consent, setConsent] = useState(false),
-    [file, setFile] = useState<File | null>(null);
+    [file, setFile] = useState<File | null>(null),
+    [progress, setProgress] = useState<number | null>(null);
   const dialog = useRef<HTMLDialogElement>(null),
     renewDialog = useRef<HTMLDialogElement>(null);
   async function action(fn: () => Promise<void>) {
@@ -43,7 +44,7 @@ export default function ReportDetail({
       setBusy(false);
     }
   }
-  async function upload(event: FormEvent) {
+  async function submitFile(event: FormEvent) {
     event.preventDefault();
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -54,7 +55,18 @@ export default function ReportDetail({
       const form = new FormData();
       form.set("archivo", file);
       form.set("revision", String(report.revision));
-      onChange(await api<Report>(`v1/informes/${report.id}/pdf`, "POST", form));
+      setProgress(0);
+      try {
+        onChange(
+          await uploadWithProgress<Report>(
+            `v1/informes/${report.id}/pdf`,
+            form,
+            setProgress,
+          ),
+        );
+      } finally {
+        setProgress(null);
+      }
       setFile(null);
       setConfirmed(false);
       setNotice("PDF guardado. Revísalo antes de publicar.");
@@ -167,7 +179,7 @@ export default function ReportDetail({
       </section>
       <Feedback error={error} notice={notice} />
       {report.estado === "BORRADOR" && (
-        <form className="section" onSubmit={upload}>
+        <form className="section" onSubmit={submitFile}>
           <h2>{report.archivoId ? "PDF adjunto" : "Adjunta el resultado"}</h2>
           <p>
             PDF de hasta 10 MB, sin contraseña, scripts ni archivos adjuntos.
@@ -189,6 +201,24 @@ export default function ReportDetail({
               {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
             </p>
           )}
+          {progress !== null && (
+            <div className="progress" role="status" aria-live="polite">
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <span style={{ width: `${progress}%` }} />
+              </div>
+              <small>
+                {progress < 100
+                  ? `Subiendo… ${progress}%`
+                  : "Analizando el documento…"}
+              </small>
+            </div>
+          )}
           <button disabled={!file || busy}>
             {busy ? "Procesando…" : "Guardar PDF"}
           </button>
@@ -197,17 +227,23 @@ export default function ReportDetail({
       {report.archivo && (
         <section className="section">
           <h2>Revisa el documento</h2>
-          <p>
+          <p className="muted">
             {report.archivo.paginas} páginas ·{" "}
             {(report.archivo.bytes / 1024 / 1024).toFixed(1)} MB
           </p>
+          <iframe
+            className="pdf-preview"
+            // La revisión cambia con cada carga: evita que el navegador muestre el PDF anterior.
+            src={`/api/v1/informes/${report.id}/pdf?v=${report.revision}`}
+            title={`Vista previa del informe de ${report.paciente.nombre}`}
+          />
           <a
             className="button"
-            href={`/api/v1/informes/${report.id}/pdf`}
+            href={`/api/v1/informes/${report.id}/pdf?v=${report.revision}`}
             target="_blank"
             rel="noreferrer"
           >
-            Descargar PDF para revisar
+            Abrir en otra pestaña
           </a>
         </section>
       )}

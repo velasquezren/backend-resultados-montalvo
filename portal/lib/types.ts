@@ -17,6 +17,17 @@ export type Access = {
   url?: string;
   expiraEn?: string;
 };
+/** Lo que devuelve la lista: solo lo que se pinta en cada fila. */
+export type ReportSummary = {
+  id: string;
+  revision: number;
+  estudio: string;
+  fechaEstudio: string;
+  estado: "BORRADOR" | "PUBLICADO" | "RETIRADO";
+  archivoId: string | null;
+  publicadoEn: string | null;
+  paciente: { id: string; nombre: string };
+};
 export type Report = {
   id: string;
   revision: number;
@@ -35,6 +46,7 @@ export type Config = {
   maxPdfBytes: number;
   limiteAvisosDiario: number;
   avisoCosto: string;
+  estudiosFrecuentes: string[];
 };
 export const reportLabels = {
   BORRADOR: "En preparación",

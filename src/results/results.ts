@@ -9,18 +9,37 @@ import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 
 export function scope(actor: Actor): Prisma.InformeWhereInput { return actor.rol === 'ADMIN' ? {} : { medicoId: actor.id }; }
-const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: true, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } }, aviso: { select: { estado: true, codigoError: true, intentos: true } } } satisfies Prisma.InformeInclude;
+const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true, telefono: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } }, aviso: { select: { estado: true, codigoError: true, intentos: true } } } satisfies Prisma.InformeInclude;
+/**
+ * La lista solo pinta paciente, estudio, fecha y estado. Traer el detalle
+ * completo obligaba a Prisma a consultar cinco relaciones por página para
+ * descartarlas en el cliente.
+ */
+const summary = { id: true, revision: true, estudio: true, fechaEstudio: true, estado: true, archivoId: true, publicadoEn: true, paciente: { select: { id: true, nombre: true } } } satisfies Prisma.InformeSelect;
 
 @Injectable()
 export class Results {
   constructor(private readonly db: Database, private readonly files: PrivateFiles, private readonly scanner: PdfScanner, @Inject(CONFIG) private readonly config: AppConfig) {}
   async list(dto: ListarDto, actor: Actor) {
-    const where = { ...scope(actor), estado: dto.estado, pacienteId: dto.pacienteId };
+    const buscar = dto.buscar?.trim();
+    const where: Prisma.InformeWhereInput = { ...scope(actor), estado: dto.estado, pacienteId: dto.pacienteId,
+      ...(buscar ? { OR: [{ paciente: { nombre: { contains: buscar, mode: 'insensitive' } } }, { estudio: { contains: buscar, mode: 'insensitive' } }] } : {}) };
     const [datos, total] = await this.db.$transaction([
-      this.db.informe.findMany({ where, include: detail, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (dto.pagina - 1) * dto.limite, take: dto.limite }),
+      this.db.informe.findMany({ where, select: summary, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (dto.pagina - 1) * dto.limite, take: dto.limite }),
       this.db.informe.count({ where }),
     ]);
     return { datos, total, pagina: dto.pagina, limite: dto.limite, totalPaginas: Math.ceil(total / dto.limite) };
+  }
+  /** Existencia y alcance, sin traer el detalle: distingue 404 de 409 sin coste. */
+  private async ensure(id: string, actor: Actor) {
+    const found = await this.db.informe.findFirst({ where: { id, ...scope(actor) }, select: { id: true, estado: true, revision: true, archivoId: true } });
+    if (!found) problem(404, 'INFORME_NO_ENCONTRADO', 'No encontramos el informe o no tienes acceso a él.');
+    return found;
+  }
+  /** Los estudios ya registrados, para ofrecerlos como sugerencia al escribir. */
+  async studyNames(): Promise<string[]> {
+    const rows = await this.db.informe.groupBy({ by: ['estudio'], _count: { estudio: true }, orderBy: { _count: { estudio: 'desc' } }, take: 25 });
+    return rows.map(row => row.estudio);
   }
   async get(id: string, actor: Actor) {
     const report = await this.db.informe.findFirst({ where: { id, ...scope(actor) }, include: detail });
@@ -42,10 +61,15 @@ export class Results {
     return result;
   }
   async upload(id: string, revision: number, buffer: Buffer, actor: Actor) {
-    const report = await this.get(id, actor);
+    const report = await this.ensure(id, actor);
     if (report.estado !== 'BORRADOR' || report.revision !== revision) problem(409, 'INFORME_CAMBIO', 'El informe cambió o ya está publicado. Actualízalo antes de continuar.');
-    const metadata = await validatePdf(buffer);
-    await this.scanner.scan(buffer);
+    // Validación y antivirus son independientes: en serie el médico esperaba la
+    // suma de ambos. `allSettled` conserva el orden de error anterior y evita
+    // que el rechazo perdedor quede sin manejar.
+    const [validation, scan] = await Promise.allSettled([validatePdf(buffer), this.scanner.scan(buffer)]);
+    if (validation.status === 'rejected') throw validation.reason;
+    if (scan.status === 'rejected') throw scan.reason;
+    const metadata = validation.value;
     const key = `${randomUUID()}.pdf`;
     await this.files.put(key, buffer);
     try {
@@ -62,7 +86,7 @@ export class Results {
     return this.get(id, actor);
   }
   async publish(id: string, dto: PublicarDto, actor: Actor) {
-    await this.get(id, actor);
+    await this.ensure(id, actor);
     if (dto.notificar && !this.config.notifications) problem(409, 'AVISOS_DESACTIVADOS', 'Los avisos aún no están configurados. Puedes publicar sin notificación y entregar el acceso al paciente.');
     if (dto.notificar && !dto.telefonoConfirmado) problem(400, 'TELEFONO_NO_CONFIRMADO', 'Revisa y confirma el número del paciente antes de autorizar el aviso.');
     if (dto.notificar && (!dto.consentimientoWhatsApp || !dto.consentimientoVersion)) problem(400, 'CONSENTIMIENTO_REQUERIDO', 'Confirma que el paciente autorizó este aviso de WhatsApp.');
@@ -81,7 +105,7 @@ export class Results {
     return this.get(id, actor);
   }
   async notify(id: string, dto: NotificarDto, actor: Actor) {
-    await this.get(id, actor);
+    await this.ensure(id, actor);
     if (!this.config.notifications) problem(409, 'AVISOS_DESACTIVADOS', 'Los avisos todavía no están configurados.');
     await this.db.$transaction(async tx => {
       const updated = await tx.informe.updateMany({ where: { id, ...scope(actor), estado: 'PUBLICADO', revision: dto.revision }, data: { revision: { increment: 1 } } });
@@ -96,7 +120,7 @@ export class Results {
     return this.get(id, actor);
   }
   async withdraw(id: string, dto: RetirarDto, actor: Actor) {
-    await this.get(id, actor);
+    await this.ensure(id, actor);
     await this.db.$transaction(async tx => {
       const updated = await tx.informe.updateMany({ where: { id, ...scope(actor), revision: dto.revision, estado: { not: 'RETIRADO' } }, data: { estado: 'RETIRADO', retiradoEn: new Date(), motivoRetiro: dto.motivo, revision: { increment: 1 } } });
       if (!updated.count) problem(409, 'INFORME_CAMBIO', 'El informe cambió. Actualízalo antes de retirarlo.');
@@ -110,7 +134,7 @@ export class Results {
     return this.get(id, actor);
   }
   async renewAccess(id: string, actor: Actor) {
-    const report = await this.get(id, actor);
+    const report = await this.ensure(id, actor);
     if (report.estado === 'RETIRADO') problem(409, 'INFORME_RETIRADO', 'Un informe retirado no puede volver a habilitarse.');
     const codigo = accessCode();
     const access = await this.db.$transaction(async tx => {
@@ -126,7 +150,7 @@ export class Results {
     return { id: access.id, codigo, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` };
   }
   async download(id: string, actor: Actor) {
-    const report = await this.get(id, actor);
+    const report = await this.ensure(id, actor);
     if (!report.archivoId) problem(404, 'PDF_PENDIENTE', 'Este informe todavía no tiene PDF.');
     const buffer = await this.readFile(report.archivoId);
     await this.db.auditoria.create({ data: { actorId: actor.id, accion: 'PDF_CONSULTADO_MEDICO', informeId: id } });

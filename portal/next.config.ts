@@ -6,6 +6,21 @@ const config: NextConfig = {
   async headers() {
     return [
       {
+        // El PDF se revisa incrustado en el propio portal: DENY lo impediría
+        // incluso desde el mismo origen. Las páginas siguen con DENY abajo.
+        source: "/api/:path*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self'",
+          },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },

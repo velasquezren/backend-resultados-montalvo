@@ -14,9 +14,9 @@ import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
 import { Results } from './results/results';
 
-function fileResponse(response: Response, file: Buffer): void {
+function fileResponse(response: Response, file: Buffer, disposition: 'inline' | 'attachment' = 'attachment'): void {
   response.setHeader('Content-Type', 'application/pdf');
-  response.setHeader('Content-Disposition', 'attachment; filename="informe.pdf"');
+  response.setHeader('Content-Disposition', `${disposition}; filename="informe.pdf"`);
   response.setHeader('Content-Length', file.length);
   response.send(file);
 }
@@ -57,7 +57,7 @@ export class PatientsController {
 @Controller('v1/informes')
 export class ResultsController {
   constructor(private readonly results: Results, private readonly attempts: Attempts, @Inject(CONFIG) private readonly config: AppConfig) {}
-  @Get('configuracion') configuration() { return { tipo: 'ECOGRAFIA', maxPdfBytes: MAX_PDF_BYTES, notificacionesHabilitadas: this.config.notifications, limiteAvisosDiario: this.config.dailyLimit, avisoCosto: 'WhatsApp puede generar cargos. Revisa el destinatario y confirma el aviso antes de publicar.', accesoPaciente: 'CODIGO_ENTREGADO_EN_CLINICA' }; }
+  @Get('configuracion') async configuration() { return { tipo: 'ECOGRAFIA', maxPdfBytes: MAX_PDF_BYTES, notificacionesHabilitadas: this.config.notifications, limiteAvisosDiario: this.config.dailyLimit, avisoCosto: 'WhatsApp puede generar cargos. Revisa el destinatario y confirma el aviso antes de publicar.', accesoPaciente: 'CODIGO_ENTREGADO_EN_CLINICA', estudiosFrecuentes: await this.results.studyNames() }; }
   @Get() list(@Query() dto: ListarDto, @Req() req: AuthRequest) { return this.results.list(dto, req.actor); }
   @Post() create(@Body() dto: CrearInformeDto, @Req() req: AuthRequest) { return this.results.create(dto, req.actor); }
   @Get(':id') get(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) { return this.results.get(id, req.actor); }
@@ -74,7 +74,8 @@ export class ResultsController {
   @Post(':id/acceso/renovar') @HttpCode(200) renew(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) { return this.results.renewAccess(id, req.actor); }
   @Get(':id/pdf') async download(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest, @Res() response: Response) {
     await this.attempts.consume('descarga-medico', req.actor.id, 60, 60);
-    fileResponse(response, await this.results.download(id, req.actor));
+    // `inline` para que el informe se revise dentro del portal, sin salir a otro visor.
+    fileResponse(response, await this.results.download(id, req.actor), 'inline');
   }
 }
 

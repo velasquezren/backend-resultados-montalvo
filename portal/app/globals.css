@@ -552,3 +552,70 @@ dialog p {
 }
 
 .toolbar{flex-wrap:wrap}.toolbar>span{margin-right:auto}
+
+/* --- Buscador de la lista --- */
+.filters .search {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+.filters .search input {
+  width: 100%;
+}
+
+/* --- Estado del informe, con color semántico --- */
+.status.estado-borrador {
+  background: #fdf3e3;
+  color: #8a5a11;
+}
+.status.estado-publicado {
+  background: var(--wash);
+  color: var(--primary);
+}
+.status.estado-retirado {
+  background: #f7eceb;
+  color: var(--error);
+}
+.report-row[aria-busy="true"] {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* --- Progreso real de la subida --- */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0;
+}
+.progress-track {
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-track span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.2s ease-out;
+}
+.progress small {
+  color: var(--muted);
+}
+
+/* --- Revisión del PDF dentro del portal --- */
+.pdf-preview {
+  width: 100%;
+  height: min(75vh, 900px);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--wash);
+  margin-bottom: 16px;
+  display: block;
+}
+@media (max-width: 640px) {
+  .pdf-preview {
+    height: 60vh;
+  }
+}

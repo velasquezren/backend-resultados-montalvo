@@ -1,12 +1,14 @@
 "use client";
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '@/lib/client';
-import { Access, Patient } from '@/lib/types';
+import { Access, Config, Patient } from '@/lib/types';
 import { Feedback, message, today } from './shared';
 export default function NewReport({
+  config,
   onCancel,
   onCreated,
 }: {
+  config: Config | null;
   onCancel: () => void;
   onCreated: (id: string, access: Access) => Promise<void>;
 }) {
@@ -27,7 +29,7 @@ export default function NewReport({
     try {
       setPatient(
         await api<Patient>("v1/pacientes/buscar", "POST", {
-          [kind]: identifier.trim(),
+          identificador: identifier.trim(),
         }),
       );
     } catch (err) {
@@ -104,37 +106,25 @@ export default function NewReport({
       {!patient ? (
         <>
           <form onSubmit={search}>
-            <div className="form-grid">
-              <label>
-                Identificador
-                <select
-                  value={kind}
-                  disabled={busy}
-                  onChange={(e) => {
-                    setKind(e.target.value);
-                    setRegister(false);
-                  }}
-                >
-                  <option value="ci">CI</option>
-                  <option value="pac">Número PAC</option>
-                </select>
-              </label>
-              <label>
-                {kind === "ci" ? "CI del paciente" : "Número PAC"}
-                <input
-                  value={identifier}
-                  onChange={(e) => {
-                    setIdentifier(e.target.value);
-                    setRegister(false);
-                  }}
-                  required
-                  minLength={kind === "ci" ? 3 : 2}
-                  maxLength={40}
-                  autoComplete="off"
-                  disabled={busy}
-                />
-              </label>
-            </div>
+            <label>
+              CI o número PAC
+              <input
+                value={identifier}
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  setRegister(false);
+                }}
+                required
+                minLength={2}
+                maxLength={40}
+                autoComplete="off"
+                autoCapitalize="characters"
+                disabled={busy}
+              />
+              <small>
+                Buscamos coincidencia exacta en los dos identificadores.
+              </small>
+            </label>
             <button className="primary" disabled={busy}>
               {busy ? "Buscando…" : "Buscar paciente"}
             </button>
@@ -147,6 +137,19 @@ export default function NewReport({
                 sus datos.
               </p>
               <form onSubmit={savePatient}>
+                <label>
+                  <span>
+                    <strong>{identifier.trim().toUpperCase()}</strong> es un…
+                  </span>
+                  <select
+                    value={kind}
+                    disabled={busy}
+                    onChange={(e) => setKind(e.target.value)}
+                  >
+                    <option value="ci">CI / carnet</option>
+                    <option value="pac">Número PAC</option>
+                  </select>
+                </label>
                 <label>
                   Nombre completo
                   <input
@@ -194,12 +197,18 @@ export default function NewReport({
               Nombre del estudio
               <input
                 name="estudio"
+                list="estudios-frecuentes"
                 required
                 minLength={3}
                 maxLength={160}
                 placeholder="Ej. Ecografía abdominal"
                 disabled={!!created}
               />
+              <datalist id="estudios-frecuentes">
+                {(config?.estudiosFrecuentes ?? []).map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
             </label>
             <label>
               Fecha del estudio

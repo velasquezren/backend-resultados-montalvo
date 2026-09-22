@@ -1,7 +1,7 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/client';
-import { Access, Config, Report, User, dateLabel, reportLabels } from '@/lib/types';
+import { Access, Config, Report, ReportSummary, User, dateLabel, reportLabels } from '@/lib/types';
 import NewReport from './NewReport';
 import ReportDetail from './ReportDetail';
 import NewUser from './NewUser';
@@ -10,9 +10,13 @@ import { Feedback, message } from './shared';
 export default function DoctorPortal() {
   const [passwordScreen, setPasswordScreen] = useState(false);
   const [user, setUser] = useState<User | null>(null),
+    [checking, setChecking] = useState(true),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
-  const [reports, setReports] = useState<Report[]>([]),
+  const [query, setQuery] = useState(""),
+    [search, setSearch] = useState(""),
+    [opening, setOpening] = useState<string | null>(null);
+  const [reports, setReports] = useState<ReportSummary[]>([]),
     [total, setTotal] = useState(0),
     [page, setPage] = useState(1),
     [state, setState] = useState("");
@@ -22,13 +26,28 @@ export default function DoctorPortal() {
     [users, setUsers] = useState(false);
   const [access, setAccess] = useState<Access | null>(null),
     [busy, setBusy] = useState(false);
+  // Una sola definición de la consulta: antes el efecto y `refresh` la repetían.
+  const listPath = useCallback(
+    () =>
+      `v1/informes?pagina=${page}&limite=15${state ? `&estado=${state}` : ""}${search ? `&buscar=${encodeURIComponent(search)}` : ""}`,
+    [page, state, search],
+  );
   const refresh = useCallback(async () => {
-    const result = await api<{ datos: Report[]; total: number }>(
-      `v1/informes?pagina=${page}&limite=15${state ? `&estado=${state}` : ""}`,
+    const result = await api<{ datos: ReportSummary[]; total: number }>(
+      listPath(),
     );
     setReports(result.datos);
     setTotal(result.total);
-  }, [page, state]);
+  }, [listPath]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch((previous) => {
+        if (previous !== query.trim()) setPage(1);
+        return query.trim();
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
   useEffect(() => {
     let active = true;
     api<User>("v1/auth/yo")
@@ -40,7 +59,7 @@ export default function DoctorPortal() {
           setError(message(err));
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setChecking(false);
       });
     return () => {
       active = false;
@@ -49,16 +68,24 @@ export default function DoctorPortal() {
   useEffect(() => {
     if (!user) return;
     let active = true;
+    api<Config>("v1/informes/configuracion")
+      .then((value) => {
+        if (active) setConfig(value);
+      })
+      .catch((err) => {
+        if (active) setError(message(err));
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
     setLoading(true);
-    Promise.all([
-      api<Config>("v1/informes/configuracion"),
-      api<{ datos: Report[]; total: number }>(
-        `v1/informes?pagina=${page}&limite=15${state ? `&estado=${state}` : ""}`,
-      ),
-    ])
-      .then(([configuration, list]) => {
+    api<{ datos: ReportSummary[]; total: number }>(listPath())
+      .then((list) => {
         if (active) {
-          setConfig(configuration);
           setReports(list.datos);
           setTotal(list.total);
         }
@@ -72,7 +99,7 @@ export default function DoctorPortal() {
     return () => {
       active = false;
     };
-  }, [user, page, state]);
+  }, [user, listPath]);
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -90,16 +117,17 @@ export default function DoctorPortal() {
       setBusy(false);
     }
   }
-  async function open(report: Report) {
+  async function open(report: ReportSummary) {
+    if (opening) return;
     setError("");
-    setBusy(true);
+    setOpening(report.id);
     try {
       setSelected(await api<Report>(`v1/informes/${report.id}`));
       setAccess(null);
     } catch (err) {
       setError(message(err));
     } finally {
-      setBusy(false);
+      setOpening(null);
     }
   }
   if (!user)
@@ -115,7 +143,7 @@ export default function DoctorPortal() {
           Ingresa con tu cuenta de la clínica para preparar y entregar
           resultados.
         </p>
-        {loading ? (
+        {checking ? (
           <p role="status">Comprobando sesión…</p>
         ) : (
           <form onSubmit={login}>
@@ -190,6 +218,7 @@ export default function DoctorPortal() {
         />
       ) : creating ? (
         <NewReport
+          config={config}
           onCancel={() => setCreating(false)}
           onCreated={async (id, grant) => {
             const report = await api<Report>(`v1/informes/${id}`);
@@ -222,6 +251,17 @@ export default function DoctorPortal() {
           </div>
           <Feedback error={error} />
           <div className="filters">
+            <label className="search">
+              Buscar
+              <input
+                type="search"
+                value={query}
+                placeholder="Nombre del paciente o estudio"
+                autoComplete="off"
+                maxLength={160}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
             <label>
               Mostrar
               <select
@@ -259,14 +299,18 @@ export default function DoctorPortal() {
           ) : reports.length === 0 ? (
             <div className="empty">
               <h2>
-                {state
-                  ? "No hay informes con este estado"
-                  : "Todavía no hay informes"}
+                {search
+                  ? `Sin resultados para “${search}”`
+                  : state
+                    ? "No hay informes con este estado"
+                    : "Todavía no hay informes"}
               </h2>
               <p>
-                {state
-                  ? "Prueba otro filtro o crea un nuevo informe."
-                  : "Empieza identificando al paciente y adjuntando su PDF."}
+                {search
+                  ? "Prueba con otra parte del nombre o cambia el filtro de estado."
+                  : state
+                    ? "Prueba otro filtro o crea un nuevo informe."
+                    : "Empieza identificando al paciente y adjuntando su PDF."}
               </p>
             </div>
           ) : (
@@ -275,7 +319,7 @@ export default function DoctorPortal() {
                 <button
                   className="report-row"
                   key={report.id}
-                  disabled={busy}
+                  aria-busy={opening === report.id}
                   onClick={() => void open(report)}
                 >
                   <div>
@@ -284,8 +328,12 @@ export default function DoctorPortal() {
                       {report.estudio} · {dateLabel(report.fechaEstudio)}
                     </span>
                   </div>
-                  <span className="status">{reportLabels[report.estado]}</span>
-                  <span className="row-action">Revisar →</span>
+                  <span className={`status estado-${report.estado.toLowerCase()}`}>
+                    {reportLabels[report.estado]}
+                  </span>
+                  <span className="row-action">
+                    {opening === report.id ? "Abriendo…" : "Revisar →"}
+                  </span>
                 </button>
               ))}
             </div>

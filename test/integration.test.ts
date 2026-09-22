@@ -105,6 +105,57 @@ test('pacientes: búsqueda exacta, CI/PAC únicos, sin mezclar fichas', async ()
   assert.equal((await api('/v1/pacientes/buscar', 'POST', { ci: 'PRUEBA-100' }, medico)).status, 200);
   assert.equal((await api('/v1/pacientes', 'POST', { nombre: 'Sin identificador' }, medico)).status, 400);
 });
+
+test('el identificador único resuelve CI o PAC sin elegir el tipo de antemano', async () => {
+  const suffix = randomUUID().slice(0, 12);
+  const created = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente identificador', ci: `CI-${suffix}`, pac: `PAC-${suffix}` }, medico);
+  assert.equal(created.status, 201);
+  for (const value of [`CI-${suffix}`, `PAC-${suffix}`, `  ci-${suffix}  `]) {
+    const found = await api<{ id: string }>('/v1/pacientes/buscar', 'POST', { identificador: value }, medico);
+    assert.equal(found.status, 200, `no resolvió ${value}`);
+    assert.equal(found.data.id, created.data.id);
+  }
+  // Sigue siendo exacto: un fragmento no debe devolver la ficha de nadie.
+  assert.equal((await api('/v1/pacientes/buscar', 'POST', { identificador: suffix.slice(0, 6) }, medico)).status, 404);
+  // Mezclar los dos modos es ambiguo y se rechaza.
+  assert.equal((await api('/v1/pacientes/buscar', 'POST', { identificador: `CI-${suffix}`, ci: `CI-${suffix}` }, medico)).status, 400);
+});
+
+test('la lista filtra por nombre de paciente y por estudio, dentro del alcance del médico', async () => {
+  const marca = `Zeta${randomUUID().slice(0, 8)}`;
+  const patient = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: `${marca} Apellido`, ci: `CI-B-${randomUUID().slice(0, 12)}` }, medico);
+  assert.equal(patient.status, 201);
+  const report = await api<Created>('/v1/informes', 'POST', { pacienteId: patient.data.id, estudio: 'Ecografía mamaria de control', fechaEstudio: '2026-01-02' }, medico);
+  assert.equal(report.status, 201);
+
+  const porNombre = await api<{ datos: Report[]; total: number }>(`/v1/informes?buscar=${encodeURIComponent(marca.toLowerCase())}`, 'GET', undefined, medico);
+  assert.equal(porNombre.status, 200);
+  assert.equal(porNombre.data.total, 1);
+  assert.equal(porNombre.data.datos[0]!.id, report.data.informe.id);
+
+  const porEstudio = await api<{ datos: Report[] }>('/v1/informes?buscar=mamaria', 'GET', undefined, medico);
+  assert.equal(porEstudio.status, 200);
+  assert.ok(porEstudio.data.datos.some(item => item.id === report.data.informe.id));
+
+  // La búsqueda no puede saltarse el alcance: otro médico no ve este informe.
+  const ajeno = await api<{ total: number }>(`/v1/informes?buscar=${encodeURIComponent(marca)}`, 'GET', undefined, otroMedico);
+  assert.equal(ajeno.data.total, 0);
+
+  assert.equal((await api(`/v1/informes?buscar=${'x'.repeat(200)}`, 'GET', undefined, medico)).status, 400);
+});
+
+test('la configuración ofrece el vocabulario de estudios ya registrados', async () => {
+  // Autónoma: no depende de lo que hayan dejado otras pruebas.
+  const nombreEstudio = `Ecografía ${randomUUID().slice(0, 8)}`;
+  const patient = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente vocabulario', ci: `CI-V-${randomUUID().slice(0, 12)}` }, medico);
+  assert.equal(patient.status, 201);
+  assert.equal((await api('/v1/informes', 'POST', { pacienteId: patient.data.id, estudio: nombreEstudio, fechaEstudio: '2026-01-03' }, medico)).status, 201);
+  const config = await api<{ estudiosFrecuentes: string[] }>('/v1/informes/configuracion', 'GET', undefined, medico);
+  assert.equal(config.status, 200);
+  assert.ok(Array.isArray(config.data.estudiosFrecuentes));
+  assert.ok(config.data.estudiosFrecuentes.includes(nombreEstudio));
+  assert.ok(config.data.estudiosFrecuentes.length <= 25);
+});
 test('autorización real: otro médico no lista, lee, publica ni descarga el informe', async () => {
   const report = await ready();
   assert.equal((await api(`/v1/informes/${report.informe.id}`, 'GET', undefined, otroMedico)).status, 404);

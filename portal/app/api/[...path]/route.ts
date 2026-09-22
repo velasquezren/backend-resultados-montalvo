@@ -74,7 +74,7 @@ async function handler(
           }
           parts.push(part.value);
         }
-      if (size) body = new Uint8Array(Buffer.concat(parts));
+      if (size) body = Buffer.concat(parts);
     }
     const response = await fetch(
       `${base.replace(/\/$/, "")}/${path}${request.nextUrl.search}`,
