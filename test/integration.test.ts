@@ -315,3 +315,49 @@ test('cambiar contraseña revoca sesiones y exige conocer la contraseña anterio
   assert.equal((await api('/v1/auth/login','POST',{email:'cambio@prueba.test',password:'clave-inicial-pruebas'})).status,401);
   assert.equal((await api('/v1/auth/login','POST',{email:'cambio@prueba.test',password:'clave-nueva-pruebas'})).status,200);
 });
+
+test('el vínculo con el CRM se deriva del PAC en forma canónica', async () => {
+  const n = randomUUID().slice(0, 8).toUpperCase();
+  // El médico teclea el PAC a mano: guiones y minúsculas no deben romper el cruce.
+  const conGuion = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente guion', pac: `pac-${n}` }, medico);
+  assert.equal(conGuion.status, 201);
+  assert.equal((await db.paciente.findUniqueOrThrow({ where: { id: conGuion.data.id } })).referenciaCrm, `PAC${n}`);
+
+  // Sin PAC no hay vínculo: el CRM identifica por PAC, no por CI.
+  const soloCi = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente sin pac', ci: `CI-X-${n}` }, medico);
+  assert.equal(soloCi.status, 201);
+  assert.equal((await db.paciente.findUniqueOrThrow({ where: { id: soloCi.data.id } })).referenciaCrm, null);
+
+  // Un médico no puede imponer el vínculo a mano; sigue siendo de ADMIN.
+  assert.equal((await api('/v1/pacientes', 'POST', { nombre: 'Paciente ajeno', pac: `PAC-Z-${n}`, referenciaCrm: 'INVENTADO' }, medico)).status, 403);
+});
+
+test('la cola del CRM lista informes publicados vinculados, sin filtrar el código', async () => {
+  const informe = await ready();
+  assert.equal((await publish(informe.informe)).status, 200);
+
+  assert.equal((await api('/v1/integraciones/crm/informes', 'GET')).status, 401);
+  assert.equal((await api('/v1/integraciones/crm/informes', 'GET', undefined, 'token-corto')).status, 401);
+
+  type Fila = { informeId: string; referenciaCrm: string; accesoId: string; accesoVigente: boolean; estudio: string };
+  const cola = await api<{ datos: Fila[]; total: number; totalPaginas: number }>('/v1/integraciones/crm/informes?limite=100', 'GET', undefined, 'c'.repeat(40));
+  assert.equal(cola.status, 200);
+  const fila = cola.data.datos.find(item => item.informeId === informe.informe.id);
+  assert.ok(fila, 'el informe publicado debe aparecer en la cola');
+  assert.equal(fila.accesoId, informe.acceso.id);
+  assert.equal(fila.accesoVigente, true);
+
+  // Lo que NO puede viajar al CRM.
+  const crudo = JSON.stringify(cola.data);
+  assert.equal(crudo.includes(informe.acceso.codigo), false, 'el código de acceso no puede salir');
+  for (const clave of ['codigo', 'codigoHash', 'pdf', 'sha256', 'telefono', 'ci']) assert.equal(clave in fila, false, `sobra ${clave}`);
+
+  // Un borrador no está publicado: no debe aparecer.
+  const borrador = await ready();
+  assert.equal(cola.data.datos.some(item => item.informeId === borrador.informe.id), false);
+
+  // Retirar lo saca de la cola.
+  assert.equal((await api(`/v1/informes/${informe.informe.id}/retirar`, 'POST', { revision: (await api<{ revision: number }>(`/v1/informes/${informe.informe.id}`, 'GET', undefined, medico)).data.revision, motivo: 'prueba de cola' }, medico)).status, 200);
+  const despues = await api<{ datos: Fila[] }>('/v1/integraciones/crm/informes?limite=100', 'GET', undefined, 'c'.repeat(40));
+  assert.equal(despues.data.datos.some(item => item.informeId === informe.informe.id), false);
+});

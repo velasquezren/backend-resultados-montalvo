@@ -4,7 +4,7 @@ import { Actor } from '../auth/auth';
 import { accessCode, digest } from '../auth/crypto';
 import { AppConfig, CONFIG } from '../config';
 import { Database, Prisma, Transaction } from '../database';
-import { CrearInformeDto, ListarDto, NotificarDto, PublicarDto, RetirarDto } from '../dto';
+import { CrearInformeDto, InformesCrmDto, ListarDto, NotificarDto, PublicarDto, RetirarDto } from '../dto';
 import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 
@@ -35,6 +35,40 @@ export class Results {
     const found = await this.db.informe.findFirst({ where: { id, ...scope(actor) }, select: { id: true, estado: true, revision: true, archivoId: true } });
     if (!found) problem(404, 'INFORME_NO_ENCONTRADO', 'No encontramos el informe o no tienes acceso a él.');
     return found;
+  }
+  /**
+   * Informes publicados de pacientes vinculados al CRM, para que éste arme la
+   * cola de avisos pendientes. Es una lectura administrativa: lleva el ID de
+   * acceso —que identifica pero no autoriza— y nunca el código, el PDF ni nada
+   * clínico. Si el acceso está vencido o revocado se dice, para que el CRM no
+   * mande a un paciente a una puerta cerrada.
+   */
+  async publishedForCrm(dto: InformesCrmDto) {
+    const where: Prisma.InformeWhereInput = { estado: 'PUBLICADO', paciente: { referenciaCrm: { not: null } }, acceso: { isNot: null } };
+    const [filas, total] = await this.db.$transaction([
+      this.db.informe.findMany({
+        where,
+        select: { id: true, estudio: true, fechaEstudio: true, publicadoEn: true,
+          paciente: { select: { referenciaCrm: true } },
+          acceso: { select: { id: true, expiraEn: true, revocadoEn: true } } },
+        orderBy: [{ publicadoEn: 'desc' }, { id: 'desc' }],
+        skip: (dto.pagina - 1) * dto.limite, take: dto.limite,
+      }),
+      this.db.informe.count({ where }),
+    ]);
+    const ahora = new Date();
+    return {
+      datos: filas.map(fila => ({
+        informeId: fila.id,
+        referenciaCrm: fila.paciente.referenciaCrm!,
+        estudio: fila.estudio,
+        fechaEstudio: fila.fechaEstudio,
+        publicadoEn: fila.publicadoEn,
+        accesoId: fila.acceso!.id,
+        accesoVigente: !fila.acceso!.revocadoEn && fila.acceso!.expiraEn > ahora,
+      })),
+      total, pagina: dto.pagina, limite: dto.limite, totalPaginas: Math.ceil(total / dto.limite),
+    };
   }
   /** Los estudios ya registrados, para ofrecerlos como sugerencia al escribir. */
   async studyNames(): Promise<string[]> {

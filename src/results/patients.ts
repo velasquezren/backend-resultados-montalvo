@@ -6,6 +6,17 @@ import { problem } from '../errors';
 
 export const normalizeId = (value?: string): string | undefined => value?.trim().toUpperCase().replace(/\s+/g, ' ') || undefined;
 
+/**
+ * Clave con la que el CRM reconoce a este paciente: su PAC de FileMaker en
+ * forma canónica (mayúsculas, sin separadores).
+ *
+ * No es una inferencia por nombre ni una coincidencia aproximada —eso sigue
+ * prohibido—: el PAC es único en los dos sistemas y el CRM lo guarda también
+ * en mayúsculas. Se quitan guiones y espacios porque el médico lo teclea a
+ * mano y `PAC-33009` y `PAC 33009` son el mismo paciente que `PAC33009`.
+ */
+export const claveCrm = (pac?: string): string | undefined => pac?.toUpperCase().replace(/[^A-Z0-9]/g, '') || undefined;
+
 @Injectable()
 export class Patients {
   constructor(private readonly db: Database) {}
@@ -24,8 +35,11 @@ export class Patients {
     const ci = normalizeId(dto.ci); const pac = normalizeId(dto.pac);
     if (!ci && !pac) problem(400, 'IDENTIFICADOR_REQUERIDO', 'Indica el CI o el PAC para identificar al paciente.');
     if (dto.referenciaCrm && actor.rol !== 'ADMIN') problem(403, 'VINCULO_ADMINISTRATIVO', 'El vínculo con el CRM lo configura un administrador.');
+    // El vínculo explícito sigue siendo de ADMIN; el derivado del PAC no es una
+    // asignación manual, es la misma clave escrita en forma canónica.
+    const referenciaCrm = dto.referenciaCrm ?? claveCrm(pac);
     return this.db.$transaction(async tx => {
-      const patient = await tx.paciente.create({ data: { ...dto, nombre: dto.nombre.trim(), ci, pac } });
+      const patient = await tx.paciente.create({ data: { ...dto, nombre: dto.nombre.trim(), ci, pac, referenciaCrm } });
       await tx.auditoria.create({ data: { actorId: actor.id, accion: 'PACIENTE_REGISTRADO' } });
       return patient;
     });

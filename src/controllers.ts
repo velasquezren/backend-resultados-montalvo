@@ -6,7 +6,7 @@ import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth'
 import { equalSecret } from './auth/crypto';
 import { CONFIG, AppConfig } from './config';
 import { Database } from './database';
-import { BuscarPacienteDto, CodigoDto, CrearInformeDto, EventosDto, ListarDto, LoginDto, PasswordDto, NotificarDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
+import { BuscarPacienteDto, CodigoDto, CrearInformeDto, EventosDto, InformesCrmDto, ListarDto, LoginDto, PasswordDto, NotificarDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
 import { MAX_PDF_BYTES } from './files/files';
 import { Notifications } from './notifications/notifications';
@@ -109,10 +109,20 @@ export class MetaWebhookController {
 @Public()
 @Controller('v1/integraciones/crm')
 export class CrmEventsController {
-  constructor(private readonly db: Database, private readonly attempts: Attempts) {}
-  @Get('eventos') async events(@Query() dto: EventosDto, @Req() req: Request) {
+  constructor(private readonly db: Database, private readonly results: Results, private readonly attempts: Attempts) {}
+  /** Una sola definición de la credencial: dos copias divergen. */
+  private authorize(req: Request): void {
     const expected = process.env.CRM_INTEGRATION_TOKEN;
     if (!expected || expected.length < 32 || !equalSecret(bearer(req), expected)) problem(401, 'INTEGRACION_NO_AUTORIZADA', 'Integración no autorizada.');
+  }
+  /** Cola de avisos pendientes para el CRM: qué informes publicados hay y a qué enlace apuntan. */
+  @Get('informes') async reports(@Query() dto: InformesCrmDto, @Req() req: Request) {
+    this.authorize(req);
+    await this.attempts.consume('crm-informes', 'consumer', 60, 60);
+    return this.results.publishedForCrm(dto);
+  }
+  @Get('eventos') async events(@Query() dto: EventosDto, @Req() req: Request) {
+    this.authorize(req);
     await this.attempts.consume('crm-eventos', 'consumer', 60, 60);
     const datos = await this.db.eventoIntegracion.findMany({ where: { secuencia: { gt: dto.despues } }, orderBy: { secuencia: 'asc' }, take: dto.limite });
     return { datos, siguiente: datos.at(-1)?.secuencia ?? dto.despues };

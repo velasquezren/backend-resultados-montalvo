@@ -40,7 +40,19 @@ Los médicos pueden localizar pacientes por identificador exacto, pero no explor
 
 ## Integración CRM
 
-`GET /v1/integraciones/crm/eventos` entrega eventos administrativos paginados con secuencia creciente. Credencial exclusiva de lectura. Solo pacientes vinculados por `referenciaCrm` producen eventos. Ese vínculo lo asigna un administrador al crear la ficha: no inferirlo por nombre o coincidencias ambiguas.
+`GET /v1/integraciones/crm/eventos` entrega eventos administrativos paginados con secuencia creciente. Credencial exclusiva de lectura. Solo pacientes vinculados por `referenciaCrm` producen eventos.
+
+**El vínculo se deriva del PAC** (`claveCrm`: mayúsculas, sin separadores). El PAC es único en los dos sistemas y el CRM lo guarda también en mayúsculas, así que no es una inferencia: es la misma clave escrita en forma canónica. Se quitan guiones y espacios porque el médico lo teclea a mano. Un paciente sin PAC —identificado solo por CI— no se vincula y no produce eventos; eso es correcto, no un fallo. Un administrador puede seguir fijando `referenciaCrm` a mano y ese valor se respeta tal cual. Lo que sigue prohibido es inferir el vínculo por nombre o por coincidencias aproximadas.
+
+Backfill de las fichas creadas antes de esta regla, idempotente y sin tocar las ya vinculadas:
+
+```sql
+UPDATE "Paciente"
+   SET "referenciaCrm" = upper(regexp_replace(pac, '[^A-Za-z0-9]', '', 'g'))
+ WHERE pac IS NOT NULL AND "referenciaCrm" IS NULL;
+```
+
+`GET /v1/integraciones/crm/informes` entrega la cola de informes publicados de pacientes vinculados, paginada, con `accesoId` y si el acceso sigue vigente. Es lectura administrativa: el ID de acceso identifica pero no autoriza —el código lo hace— y nunca viajan el código, el PDF ni datos clínicos. El CRM decide a quién avisar y guarda él mismo a quién ya avisó: Resultados no lleva esa cuenta cuando el emisor es el CRM.
 
 Contrato: `RESULTADO_PUBLICADO` y `RESULTADO_RETIRADO`, con `informeId`, `referenciaCrm`, `id`, `secuencia`, `createdAt`. No incluye PDF, diagnóstico, código, teléfono, CI/PAC ni autorización para abrir el informe.
 

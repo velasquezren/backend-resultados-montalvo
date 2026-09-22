@@ -50,6 +50,10 @@ export class ListarDto {
   @IsOptional() @IsUUID() pacienteId?: string;
   @IsOptional() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(2, 160) buscar?: string;
 }
+export class InformesCrmDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) pagina = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite = 50;
+}
 export class CodigoDto {
   @IsString() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.toUpperCase().replace(/[ -]/g, '') : value)
   @Matches(/^[A-Z2-9]{12}$/) codigo!: string;
