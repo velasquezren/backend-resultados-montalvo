@@ -15,25 +15,51 @@ Este repositorio no configura dominios, infraestructura, facturación ni proveed
 
 La memoria de ClamAV y el análisis PDF requieren dimensionamiento. Recomendación inicial: servicio de resultados en infraestructura separada del CRM cuando el presupuesto lo permita, sin introducir múltiples servicios de negocio. Un VPS compartido necesita límites efectivos y pruebas de saturación antes de confiarle carga clínica.
 
-## Plantilla propuesta (no enviada a aprobación)
+## Plantilla de aviso (especificación final)
 
-Nombre sugerido: `resultado_disponible_montalvo`, idioma `es`, categoría solicitada `UTILITY` (Meta determina la aprobación y categoría final).
+Verificado el 2026-09-22 contra producción: `PATIENT_PORTAL_URL=https://resultados.107.175.132.15.nip.io/resultados`, y esa ruta más el UUID del acceso responde 200 pidiendo el código de 12 caracteres.
 
-Texto propuesto:
+| Campo | Valor |
+| --- | --- |
+| Nombre | `montalvo_resultado_disponible` |
+| Categoría | Utilidad |
+| Idioma | Español (`es`) |
+| Encabezado | ninguno |
+| Pie | `No compartas tu código con nadie.` |
+| Botón | Visitar sitio web · URL dinámica |
+| Texto del botón | `Ver mi informe` |
+| URL | `https://resultados.107.175.132.15.nip.io/resultados/{{1}}` |
+| Ejemplo de `{{1}}` | `3d300296-db32-4238-85e4-58d02aeb534a` |
 
-> Clínica Montalvo: tu resultado está disponible. Puedes consultarlo con el código que te entregamos en la clínica. Si necesitas ayuda, comunícate con atención al paciente.
+Cuerpo, **sin ninguna variable**:
 
-Botón: **Consultar resultado**. URL dinámica: `https://DOMINIO-REAL/resultados/{{1}}`, donde la parte dinámica es el ID de acceso, no el código. La base debe coincidir con `PATIENT_PORTAL_URL`. Esta implementación espera un botón URL en índice 0 y ningún parámetro en el cuerpo; si Meta aprueba otra estructura, adaptar transporte y contrato antes de activar.
+> Clínica Montalvo: tu informe médico ya está disponible.
+>
+> Ábrelo con el botón de abajo e ingresa el código de 12 caracteres que te entregamos en la clínica.
+>
+> Si no tienes el código o necesitas ayuda, responde a este mensaje.
 
-No agregar diagnóstico, tipo de patología, CI, PDF o código secreto al mensaje. El paciente puede seguir recibiendo notificaciones en un teléfono compartido: el texto debe ser discreto.
+**El cuerpo no puede llevar variables.** `MetaTransport` envía un único componente —el botón URL en índice 0— y ningún parámetro de cuerpo. Si la plantilla aprobada tuviera un `{{1}}` en el texto, cada envío fallaría por número de parámetros. Cambiar eso obliga a tocar el transporte y su contrato antes de activar.
+
+La parte dinámica es el **ID de acceso**, nunca el código: el enlace identifica, el código autoriza. No agregar diagnóstico, tipo de estudio, CI, PAC, PDF ni el código al mensaje; el paciente puede leerlo en un teléfono compartido.
+
+Cerrar con «responde a este mensaje» no es adorno: es el patrón con el que las tres plantillas de citas de esta clínica fueron aprobadas el 2026-09-22, y además abre la ventana de 24 horas para que recepción resuelva por el mismo hilo a quien perdió el código.
+
+**Riesgo conocido**: el botón apunta a un dominio comodín sobre IP (`nip.io`). Es el elemento con más probabilidad de rechazo y el que peor lee un paciente. Al adoptar un subdominio propio habrá que **editar la plantilla**, lo que la devuelve a revisión y reinicia su calificación de calidad: conviene tener el dominio definitivo antes de enviarla a aprobar. Si la rechazan, la variante sin botón —mismo cuerpo, sin enlace, resolviendo por respuesta dentro de la ventana de 24 h— tiene el precedente de las tres ya aprobadas.
 
 La [política de WhatsApp](https://business.whatsapp.com/policy) exige los permisos aplicables para contactar y plantillas aprobadas para iniciar conversaciones conforme a sus reglas; no hace falta obligar al paciente a escribir primero cuando se cumple ese flujo. La [tarificación oficial](https://business.whatsapp.com/products/platform-pricing) depende de categoría y mercado: no se fija un precio inventado en bolivianos.
 
 ## Elegir línea y activar
 
-Preferencia propuesta: línea dedicada a avisos de resultados para aislar configuración y operación. La elección del usuario sigue pendiente. Si se usa la recepción actual, coordinar la app, suscripción y distribución de webhooks sin reemplazar el webhook existente del CRM; no cambiar suscripciones a ciegas.
+Estado comprobado en producción el 2026-09-22, en este orden de bloqueo:
 
-Completar `WHATSAPP_PHONE_NUMBER_ID`, token con permiso adecuado, plantilla aprobada y mismo idioma, versión Graph soportada, `META_APP_SECRET` y `META_VERIFY_TOKEN`. Registrar `/webhooks/whatsapp`, verificar challenge y eventos de estado. No copiar tokens al frontend ni al repositorio.
+1. **La app de Meta está en modo desarrollo** (`CRM Montalvo`, `1026204626700838`: `is_live: false`, sin política de privacidad, sin App Review). En ese modo solo se puede escribir a números con rol en la app. Pasarla a Live exige una URL de política de privacidad, hoy vacía. **Nada de lo demás sirve hasta resolver esto.**
+2. **`/etc/montalvo-resultados/api.env` no tiene ninguna variable de WhatsApp.** El CRM sí tiene la línea completa (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID`, token). Resultados y el CRM comparten servidor, de modo que compartir la misma línea es posible y evita un segundo número.
+3. **No existía `resultados-worker.service`.** Sin worker la cola `Aviso` se llena y no sale nada: `tick()` solo corre en ese proceso, nunca al atender una petición web. La unidad está versionada en `ops/resultados-worker.service`.
+
+Completar entonces `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN` con permiso de mensajería, `WHATSAPP_TEMPLATE=montalvo_resultado_disponible`, idioma coincidente, `META_APP_SECRET` y `META_VERIFY_TOKEN`. No copiar tokens al frontend ni al repositorio.
+
+**Conflicto de webhooks, a decidir antes de activar.** Meta entrega los eventos de estado a una sola URL por app, y la app actual ya los manda al CRM. Si Resultados envía con esa misma app, sus avisos se quedarán en `ACEPTADO` para siempre: nunca verán `ENTREGADO`, `LEIDO` ni `FALLIDO`. Dos salidas legítimas: una segunda app de Meta suscrita a la misma WABA con su propio `/webhooks/whatsapp`, o que el CRM reenvíe a Resultados los eventos cuyo `biz_opaque_callback_data` le corresponda. No cambiar la suscripción existente del CRM a ciegas.
 
 Solo después: `NOTIFICATIONS_ENABLED=true`, reiniciar API/worker y realizar una prueba consentida controlada, con autorización de costo. Comprobar aceptado, entregado, fracaso y correlación del evento. No enviar una campaña ni notificar retrospectivamente todos los informes al activar.
 

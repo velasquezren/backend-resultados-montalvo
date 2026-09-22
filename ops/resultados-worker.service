@@ -1,0 +1,34 @@
+# Worker de avisos de resultados.
+#
+# Drena la cola `Aviso` y, cada ~hora, purga sesiones vencidas y contadores de
+# intentos (`Notifications.cleanup`). Esa limpieza es la razón por la que
+# conviene tenerlo activo AUNQUE los avisos estén apagados: sin él, `Sesion` y
+# `LimiteIntentos` crecen indefinidamente.
+#
+# Con NOTIFICATIONS_ENABLED=false el ciclo sale de inmediato y NO envía nada ni
+# genera cargos. Activar los avisos es cambiar esa variable, no este archivo.
+#
+# Instalar:
+#   cp ops/resultados-worker.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now resultados-worker
+[Unit]
+Description=Worker de avisos de resultados Montalvo
+After=network.target postgresql.service
+[Service]
+User=resultados
+Group=resultados
+WorkingDirectory=/opt/montalvo-resultados/current
+EnvironmentFile=/etc/montalvo-resultados/api.env
+ExecStart=/usr/bin/node dist/src/worker.js
+Restart=on-failure
+RestartSec=5
+# Más chico que el API: no procesa PDF, solo cola y HTTP a Meta.
+MemoryMax=256M
+CPUQuota=50%
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+[Install]
+WantedBy=multi-user.target
