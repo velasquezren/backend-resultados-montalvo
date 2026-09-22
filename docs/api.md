@@ -23,40 +23,26 @@ Alta inicial por CLI. La recuperación de contraseña mediante email y la admini
 | Método / ruta | Entrada / comportamiento |
 | --- | --- |
 | POST `/v1/pacientes/buscar` | `{ci}` **o** `{pac}` exacto → paciente; 404 si no existe |
-| POST `/v1/pacientes` | `{nombre,ci?,pac?,telefono?,referenciaCrm?}`. CI o PAC obligatorio; referencia CRM solo admin; teléfono E.164 (`+591…`) |
-| GET `/v1/informes/configuracion` | Límites PDF, disponibilidad de avisos, aviso de costo y modo de acceso paciente |
+| POST `/v1/pacientes` | `{nombre,ci?,pac?}`. CI o PAC obligatorio; conviene el PAC si se conoce, porque es la clave con la que el CRM reconoce al paciente sin dudas. Cualquier otro campo es 400 |
+| GET `/v1/informes/configuracion` | Límite de PDF, modo de acceso del paciente y estudios frecuentes |
 | GET `/v1/informes` | Query `pagina=1`, `limite=25` (máximo 100), `estado?`, `pacienteId?`. Resultado `{datos,total,pagina,limite,totalPaginas}` |
 | POST `/v1/informes` | `{pacienteId,estudio,fechaEstudio}` → `{informe,acceso:{id,codigo,expiraEn,url}}`; 201 |
-| GET `/v1/informes/:id` | Informe, paciente, médico, archivo sin clave de almacenamiento, aviso sin credenciales, acceso sin código/hash |
+| GET `/v1/informes/:id` | Informe, paciente, médico, archivo sin clave de almacenamiento, acceso sin código/hash |
 | POST `/v1/informes/:id/pdf` | `multipart/form-data`: `archivo` PDF y `revision`. Devuelve informe con revisión incrementada; 201 |
 | GET `/v1/informes/:id/pdf` | PDF adjunto; también permite revisión médica del borrador |
 | POST `/v1/informes/:id/publicar` | Contrato de publicación debajo; 200 |
-| POST `/v1/informes/:id/notificar` | `{revision,telefonoConfirmado:true,consentimientoWhatsApp:true,consentimientoVersion}`; solo publicado, sin aviso anterior; 200 |
 | POST `/v1/informes/:id/retirar` | `{revision,motivo}` de 5–250 caracteres; revoca acceso; 200 |
 | POST `/v1/informes/:id/acceso/renovar` | Sin cuerpo → nuevo `{id,codigo,expiraEn,url}`; revoca sesiones anteriores e incrementa revisión del informe |
 
 Todas estas rutas requieren sesión médica o admin. Médico: solo informes propios; otro médico recibe 404. Los pacientes son fichas compartidas que se localizan por identificador exacto. No existe listado público de fichas.
 
-Publicación sin WhatsApp:
+Publicación:
 
 ```json
-{"revision":2,"pacienteYPdfConfirmados":true,"notificar":false}
+{"revision":2,"pacienteYPdfConfirmados":true}
 ```
 
-Publicación con autorización de aviso:
-
-```json
-{
-  "revision":2,
-  "pacienteYPdfConfirmados":true,
-  "notificar":true,
-  "telefonoConfirmado":true,
-  "consentimientoWhatsApp":true,
-  "consentimientoVersion":"resultados-v1"
-}
-```
-
-`consentimientoVersion` identifica el texto realmente aceptado en clínica; no es una autorización inventada por el frontend. Registrar el aviso sin evidencia operativa de consentimiento no es válido aunque el JSON lo permita.
+Publicar no envía nada: pone el informe en la cola que recepción ve en el CRM, que es quien avisa al paciente por WhatsApp. Los campos de aviso que aceptaba esta ruta hasta el 2026-09-22 (`notificar`, `consentimientoWhatsApp`…) ahora son 400: un cliente viejo que los mande no publica creyendo que avisó.
 
 Después de cualquier mutación, usar la nueva revisión. Tras 409 volver a consultar y explicar lo que cambió; no repetir automáticamente la operación. Solo la creación/renovación devuelve el código en claro. La ficha permite reconstruir el enlace con el ID de acceso, pero no recuperar su código; si se perdió, renovar y entregarlo nuevamente.
 
@@ -71,25 +57,12 @@ Después de cualquier mutación, usar la nueva revisión. Tras 409 volver a cons
 
 El token de paciente no autentica al médico ni viceversa. Acceso vencido/retirado: 401 con mensaje orientado a recuperación; borrador: consulta permitida con estado de preparación y descarga 409. Nunca mostrar información clínica antes de verificar el código.
 
-## Avisos y errores
-
-| Estado aviso | Texto recomendado |
-| --- | --- |
-| PENDIENTE | Aviso pendiente |
-| ENVIANDO | Enviando aviso |
-| ACEPTADO | WhatsApp aceptó el aviso; entrega pendiente |
-| ENTREGADO | Aviso entregado |
-| LEIDO | Aviso leído |
-| FALLIDO | No se pudo enviar. Puedes entregar el acceso en la clínica |
-| INCIERTO | No pudimos confirmar el envío. No lo repetiremos automáticamente |
-| CANCELADO | Aviso cancelado |
-
-No llamar “Entregado” a `ACEPTADO`. La lectura depende de los eventos que Meta efectivamente entregue.
+## Errores
 
 Errores uniformes: `{error:{codigo,mensaje,campos?,requestId}}`. Usar `mensaje` para contexto general y mapear validaciones de campos a etiquetas humanas. Nunca mostrar trazas ni el cuerpo bruto del proveedor. HTTP: 400 datos inválidos, 401 sesión/acceso, 403 permiso administrativo, 404 no disponible para actor, 409 conflicto/estado, 413 tamaño, 429 intentos, 503 dependencia/capacidad.
 
 ## Integraciones
 
-GET `/v1/integraciones/crm/eventos?despues=0&limite=50`, Bearer exclusivo `CRM_INTEGRATION_TOKEN` → `{datos:[{secuencia,id,tipo,informeId,referenciaCrm,createdAt}],siguiente}`. Cursor persistido por consumidor, entrega repetible; deduplicar por ID. Esa credencial no abre informes.
+GET `/v1/integraciones/crm/informes?pagina=1&limite=50[&informeId=<uuid>]`, Bearer exclusivo `CRM_INTEGRATION_TOKEN` → `{datos:[{informeId,paciente:{nombre,pac,ci},estudio,fechaEstudio,publicadoEn,accesoId,accesoVigente}],total,pagina,limite,totalPaginas}`. Solo informes publicados; nunca el código, su hash ni el PDF. Esa credencial no abre la API de los médicos. El vínculo con las fichas del CRM lo resuelve el CRM (ver [arquitectura](arquitectura.md#integración-crm)).
 
-GET `/webhooks/whatsapp` verifica el challenge de Meta. POST en la misma ruta valida `X-Hub-Signature-256` sobre cuerpo original, acepta eventos de la línea configurada y actualiza estados. Un cuerpo con firma inválida devuelve 401.
+Este proyecto no expone webhook de WhatsApp: el único receptor de eventos de Meta es el CRM.

@@ -8,7 +8,7 @@
 - `npm audit`: 0 vulnerabilidades reportadas al comprobar el lockfile de esta entrega. Es una comprobación puntual del registro, no una garantía de ausencia de defectos.
 - No hubo envíos reales ni llamadas al transporte Meta durante las pruebas: se sustituyó por una implementación simulada antes de iniciar la API de prueba.
 
-Cobertura relevante: aislamiento entre médicos; tokens de paciente incompatibles con permisos médicos; validación y exclusión de contenido activo PDF; CI/PAC únicos; cargas/publicaciones simultáneas; un aviso por informe; consentimiento y teléfono confirmados; retiro, expiración y renovación de accesos; aviso posterior; worker concurrente; error permanente; máximo de reintentos; cuota diaria; timeout sin reenvío; firma de webhook y eventos fuera de orden; credencial CRM limitada a eventos; revocación de cuentas.
+Cobertura relevante (20 pruebas de integración desde el 2026-09-22): aislamiento entre médicos; tokens de paciente incompatibles con permisos médicos; validación y exclusión de contenido activo PDF; CI/PAC únicos; cargas/publicaciones simultáneas; publicar rechaza los campos de aviso retirados y la ruta de webhook ya no existe; retiro, expiración y renovación de accesos; limpieza de sesiones vencidas; cola del CRM con los identificadores del paciente y sin código; credencial CRM que no abre la API médica; revocación de cuentas.
 
 La prueba de worker detectó una comparación dependiente de la zona horaria de PostgreSQL; quedó corregida con comparación explícita UTC y verificada en el mismo entorno boliviano.
 

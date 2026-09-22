@@ -1,17 +1,15 @@
 "use client";
 import { FormEvent, useRef, useState } from 'react';
 import { api, ApiError, upload as uploadWithProgress } from '@/lib/client';
-import { Access, Config, Report, dateLabel, notificationLabels, reportLabels } from '@/lib/types';
+import { Access, Report, dateLabel, reportLabels } from '@/lib/types';
 import { Feedback, AccessCard, message } from './shared';
 export default function ReportDetail({
   report,
-  config,
   initialAccess,
   onChange,
   onBack,
 }: {
   report: Report;
-  config: Config | null;
   initialAccess: Access | null;
   onChange: (report: Report) => void;
   onBack: () => void;
@@ -21,9 +19,6 @@ export default function ReportDetail({
     [busy, setBusy] = useState(false),
     [access, setAccess] = useState<Access | null>(initialAccess);
   const [confirmed, setConfirmed] = useState(false),
-    [notify, setNotify] = useState(false),
-    [phone, setPhone] = useState(false),
-    [consent, setConsent] = useState(false),
     [file, setFile] = useState<File | null>(null),
     [progress, setProgress] = useState<number | null>(null);
   const dialog = useRef<HTMLDialogElement>(null),
@@ -79,83 +74,13 @@ export default function ReportDetail({
         await api<Report>(`v1/informes/${report.id}/publicar`, "POST", {
           revision: report.revision,
           pacienteYPdfConfirmados: confirmed,
-          notificar: notify,
-          ...(notify
-            ? {
-                telefonoConfirmado: phone,
-                consentimientoWhatsApp: consent,
-                consentimientoVersion: "resultados-v1",
-              }
-            : {}),
         }),
       );
       setNotice(
-        notify
-          ? "Informe publicado. El aviso quedó pendiente de envío."
-          : "Informe publicado. Puedes entregar el acceso al paciente.",
+        "Informe publicado. Entrega el código al paciente; recepción le enviará el enlace por WhatsApp.",
       );
     });
   }
-  const canNotify =
-    !!config?.notificacionesHabilitadas && !!report.paciente.telefono;
-  const notificationFields = (
-    <section className="notification">
-      <h3>Aviso al paciente</h3>
-      {canNotify ? (
-        <>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={notify}
-              disabled={busy}
-              onChange={(e) => {
-                setNotify(e.target.checked);
-                setPhone(false);
-                setConsent(false);
-              }}
-            />
-            <span>Autorizar un aviso de WhatsApp</span>
-          </label>
-          {notify && (
-            <div className="section">
-              <p>
-                Se enviará a <strong>{report.paciente.telefono}</strong>.
-                WhatsApp puede generar un cargo. Este aviso no incluye el PDF ni
-                el código de acceso.
-              </p>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={phone}
-                  onChange={(e) => setPhone(e.target.checked)}
-                  required
-                />
-                <span>Verifiqué que este teléfono pertenece al paciente.</span>
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  required
-                />
-                <span>
-                  El paciente autorizó recibir el aviso de disponibilidad de su
-                  resultado por WhatsApp.
-                </span>
-              </label>
-            </div>
-          )}
-        </>
-      ) : (
-        <p className="muted">
-          {config?.notificacionesHabilitadas
-            ? "Este paciente no tiene teléfono registrado. Entrega el acceso en la clínica."
-            : "Los avisos de WhatsApp aún no están habilitados. Puedes publicar y entregar el acceso en la clínica."}
-        </p>
-      )}
-    </section>
-  );
   return (
     <section className="editor">
       <button className="back" disabled={busy} onClick={onBack}>
@@ -263,20 +188,18 @@ export default function ReportDetail({
               {report.paciente.nombre}.
             </span>
           </label>
-          {notificationFields}
+          {/* El aviso lo manda recepción desde el CRM, que es quien tiene la
+              conversación con el paciente: aquí no se pide teléfono ni
+              consentimiento, y el médico no envía nada. */}
+          <p className="muted">
+            Al publicar, el informe aparece en la cola de recepción del CRM, que
+            le envía al paciente el enlace por WhatsApp. El código no viaja en el
+            mensaje: entrégalo en la clínica.
+          </p>
           <div className="sticky-action">
             <p>El paciente podrá consultar el resultado cuando lo publiques.</p>
-            <button
-              className="primary"
-              disabled={
-                busy || !confirmed || !!file || (notify && (!phone || !consent))
-              }
-            >
-              {busy
-                ? "Publicando…"
-                : notify
-                  ? "Publicar y autorizar aviso"
-                  : "Publicar informe"}
+            <button className="primary" disabled={busy || !confirmed || !!file}>
+              {busy ? "Publicando…" : "Publicar informe"}
             </button>
             {file && (
               <small>
@@ -289,54 +212,6 @@ export default function ReportDetail({
       )}
       {report.estado !== "RETIRADO" && (access || report.acceso) && (
         <AccessCard access={access || report.acceso!} />
-      )}
-      {report.aviso && (
-        <section className="section">
-          <h2>Estado del aviso</h2>
-          <p role="status">
-            {notificationLabels[report.aviso.estado] ||
-              "Estado pendiente de comprobación"}
-          </p>
-          <button
-            disabled={busy}
-            onClick={() =>
-              void action(async () => {
-                onChange(await api<Report>(`v1/informes/${report.id}`));
-                setNotice("Estado actualizado.");
-              })
-            }
-          >
-            Actualizar estado
-          </button>
-        </section>
-      )}
-      {report.estado === "PUBLICADO" && !report.aviso && canNotify && (
-        <form
-          className="section"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void action(async () => {
-              onChange(
-                await api<Report>(
-                  `v1/informes/${report.id}/notificar`,
-                  "POST",
-                  {
-                    revision: report.revision,
-                    telefonoConfirmado: phone,
-                    consentimientoWhatsApp: consent,
-                    consentimientoVersion: "resultados-v1",
-                  },
-                ),
-              );
-              setNotice("Aviso autorizado. Puedes comprobar su estado aquí.");
-            });
-          }}
-        >
-          {notificationFields}
-          <button disabled={busy || !notify || !phone || !consent}>
-            Autorizar aviso
-          </button>
-        </form>
       )}
       {report.estado !== "RETIRADO" && (
         <section className="section actions">
@@ -414,9 +289,9 @@ export default function ReportDetail({
         >
           <h2>Retirar este informe</h2>
           <p>
-            El paciente ya no podrá consultarlo. Los archivos descargados y los
-            avisos que estén en tránsito no pueden recuperarse. Para corregirlo,
-            crea un nuevo informe.
+            El paciente ya no podrá consultarlo, aunque ya haya recibido el
+            enlace. Los archivos descargados no pueden recuperarse. Para
+            corregirlo, crea un nuevo informe.
           </p>
           <label>
             Motivo del retiro

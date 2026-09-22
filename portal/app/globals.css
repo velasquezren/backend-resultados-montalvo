@@ -371,9 +371,6 @@ input[type="file"]::file-selector-button {
   overflow-wrap: anywhere;
   font-size: 13px;
 }
-.notification {
-  padding-top: 16px;
-}
 .sticky-action {
   display: grid;
   gap: 12px;

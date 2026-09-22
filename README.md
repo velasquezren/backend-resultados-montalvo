@@ -4,11 +4,11 @@
 
 API independiente para que médicos registren pacientes por CI/PAC, adjunten un PDF de ecografía, lo revisen y lo publiquen para consulta privada del paciente. El CRM no autentica médicos ni almacena informes.
 
-**Estado:** backend y portal independiente Next desplegados y verificados en https://resultados.107.175.132.15.nip.io/. El portal está en `portal/` y conserva la identidad visual de la web institucional. WhatsApp viene desactivado; no se ha enviado ningún mensaje ni solicitado aprobación de una plantilla desde este proyecto.
+**Estado:** backend y portal independiente Next desplegados y verificados en https://resultados.107.175.132.15.nip.io/. El portal está en `portal/` y conserva la identidad visual de la web institucional. **Este proyecto no envía WhatsApp**: el aviso al paciente lo manda recepción desde el CRM (ver *Entrega al paciente*).
 
 ## Arquitectura y alcance
 
-Un backend modular, una base PostgreSQL exclusiva, almacenamiento privado y dos procesos: API y worker de avisos. Sin microservicios adicionales, Redis ni dependencias del código del CRM. Resultados es el primer dominio; reservas, pagos y agenda no están implementados ni contienen tablas vacías.
+Un backend modular, una base PostgreSQL exclusiva, almacenamiento privado y dos procesos: API y worker de mantenimiento (purga horaria de sesiones vencidas). Sin microservicios adicionales, Redis ni dependencias del código del CRM. Resultados es el primer dominio; reservas, pagos y agenda no están implementados ni contienen tablas vacías.
 
 ```mermaid
 flowchart LR
@@ -16,10 +16,10 @@ flowchart LR
   P[Consulta del paciente Next] --> A
   A --> D[(PostgreSQL exclusivo)]
   A --> S[R2 privado / ClamAV]
-  W[Worker de avisos] --> D
-  W --> T[WhatsApp: plantilla aprobada]
+  W[Worker de mantenimiento] --> D
+  C[CRM: recepción] -->|Cola de publicados, credencial de solo lectura| A
+  C --> T[WhatsApp: plantilla aprobada, línea de Recepción]
   T --> P
-  C[CRM: futuro consumidor] -->|Solo eventos administrativos| A
 ```
 
 Separar la API protege los límites del producto. Para aislar también CPU/RAM se necesita otro servidor o límites de recursos: carpetas y procesos separados por sí solos no ofrecen ese aislamiento.
@@ -34,7 +34,7 @@ Requisitos: Node 22.12+ (recomendado 24), npm, PostgreSQL. No usar la base, el u
 4. `npm run build`
 5. `npm run migrate`
 6. Crear el primer administrador con `npm run usuario -- admin@tu-dominio.com "Administrador" ADMIN`. La contraseña se lee de stdin (12–128 caracteres); en una terminal usar entrada oculta o un gestor de secretos, nunca argumentos ni historial del shell.
-7. `npm start` y, en otro proceso, `npm run worker`.
+7. `npm start` y, en otro proceso, `npm run worker` (limpieza horaria).
 
 API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` comprueba PostgreSQL. El portal está en `portal/` y utiliza el puerto 3011. Consulta [su arranque](portal/README.md). Las URL de ejemplo son locales. La instalación del servidor usa HTTPS, PDFs cifrados y antivirus.
 
@@ -43,22 +43,20 @@ API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` co
 ## Flujo ya disponible
 
 1. Administrador crea cuentas `MEDICO`; cada médico consulta solamente sus informes. Administrador puede consultar todos.
-2. Médico busca un paciente por CI **o** PAC exacto; si no existe, registra nombre y al menos un identificador. Teléfono solo si se usará WhatsApp.
-3. Crea el informe con estudio y fecha. La API entrega una vez el código de consulta y el enlace. Entregar ambos al paciente en la clínica; el código no debe enviarse dentro de la misma notificación.
+2. Médico busca un paciente por CI **o** PAC exacto; si no existe, registra nombre y al menos un identificador. Registrar el PAC cuando se conozca: es la clave con la que el CRM reconoce al paciente sin dudas. No se pide teléfono: el aviso sale del CRM al número de la conversación real.
+3. Crea el informe con estudio y fecha. La API entrega una vez el código de consulta y el enlace. Entregar el código al paciente en la clínica: nunca viaja por WhatsApp.
 4. Adjunta un PDF válido de hasta 10 MB y 300 páginas. Puede sustituirlo mientras sea borrador, usando la revisión actual.
-5. Revisa identidad y PDF; publica con o sin aviso. Publicar no significa que WhatsApp se haya enviado.
+5. Revisa identidad y PDF y publica. Publicar pone el informe en la cola de recepción del CRM; no envía nada por sí mismo.
 6. El paciente usa enlace + código; su sesión dura 15 minutos y solo permite consultar ese informe. El acceso vence a los 30 días; el médico puede renovarlo.
-7. Si hubo un error, retirar revoca acceso y sesiones y cancela avisos aún pendientes. Para corregir un informe publicado, retirar y crear otro: no se modifica silenciosamente un resultado ya entregado.
+7. Si hubo un error, retirar revoca acceso y sesiones y saca el informe de la cola del CRM. Para corregir un informe publicado, retirar y crear otro: no se modifica silenciosamente un resultado ya entregado.
 
 La confirmación humana comprueba que el PDF pertenece al paciente: la API valida el archivo, pero no interpreta su contenido médico ni verifica una identidad civil.
 
-## WhatsApp y costos
+## Entrega al paciente
 
-La plantilla propuesta y la activación se describen en [operación](docs/operacion.md). `NOTIFICATIONS_ENABLED=false` por defecto. Hay que elegir una línea, obtener la aprobación de Meta, registrar consentimiento y configurar credenciales antes de activar.
+El CRM es el **único emisor** de WhatsApp (decidido el 2026-09-22): una sola app de Meta, un solo webhook, y el mensaje queda en la conversación del paciente, así que si responde lo ve quien atiende. Recepción ve en el CRM la cola de informes publicados (`GET /v1/integraciones/crm/informes`) y envía la plantilla `montalvo_resultado_disponible` con un botón al enlace del informe. El mensaje lleva el enlace, nunca el código, el PDF, el diagnóstico ni el CI.
 
-No se requiere que el paciente haya escrito previamente si se utiliza una plantilla aprobada y se cumplen los requisitos aplicables de WhatsApp. No se promete gratuidad ni aprobación automática. No enviar diagnóstico, PDF, CI o código de acceso en la plantilla.
-
-El backend admite un aviso por informe. Publicar y autorizar en paralelo no duplica ese aviso. Solo se reintentan rechazos transitorios explícitos, hasta tres intentos; un timeout queda `INCIERTO` y no se repite automáticamente. El límite diario cuenta intentos, no bolivianos, y se reinicia a medianoche UTC.
+Hasta esa fecha este proyecto tenía su propio camino de avisos (transporte Meta, webhook, consentimiento al publicar, cola con reintentos). Nunca se encendió —cero avisos en producción— y se retiró entero: dos emisores para el mismo paciente habrían sido dos historiales y dos webhooks peleando por una sola URL. Especificación de la plantilla en [operación](docs/operacion.md).
 
 ## Contratos y documentación
 
@@ -75,6 +73,6 @@ El backend admite un aviso por informe. Publicar y autorizar en paralelo no dupl
 TEST_RESULTADOS_DATABASE_URL=postgresql://usuario@127.0.0.1:5432/resultados_test npm run test:integration
 ```
 
-Las pruebas de integración vacían exclusivamente esa base; rechazan otro nombre o un host no local. Usan HTTP real, PostgreSQL real, PDFs sintéticos y transporte WhatsApp simulado. No verifican conectividad real con Meta/R2/ClamAV ni rendimiento bajo carga clínica.
+Las pruebas de integración vacían exclusivamente esa base; rechazan otro nombre o un host no local. Usan HTTP real, PostgreSQL real y PDFs sintéticos. No verifican conectividad real con R2/ClamAV ni rendimiento bajo carga clínica.
 
 Dependencias fijadas en el lockfile. Los overrides de `deepmerge-ts` y `mysql2` corrigen dependencias transitivas de Prisma 7; retirarlos cuando una actualización estable resuelva los avisos y pase las pruebas. No actualizar a una versión candidata de Prisma para evitar un override.

@@ -20,7 +20,7 @@ Buscar paciente por CI/PAC exacto → confirmar identidad → crear borrador →
 
 El botón de imprimir genera un comprobante de acceso. El código solo se muestra al crear/renovar; no es recuperable luego. Renovar y retirar explican sus consecuencias en un diálogo de pantalla completa en móvil.
 
-El administrador puede crear cuentas médicas; no existe recuperación por email ni envío automático de credenciales. No usar cuentas compartidas. Los avisos no se habilitan automáticamente al arrancar el portal.
+El administrador puede crear cuentas médicas; no existe recuperación por email ni envío automático de credenciales. No usar cuentas compartidas. El portal no envía WhatsApp: al publicar, el informe aparece en la cola de recepción del CRM, que es quien avisa al paciente.
 
 ## Comprobaciones
 

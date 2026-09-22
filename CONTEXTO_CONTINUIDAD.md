@@ -1,5 +1,16 @@
 # Contexto de continuidad — Montalvo
 
+> **Actualización 22 de septiembre de 2026 — lo que cambió respecto de lo de abajo.**
+> El camino de avisos por WhatsApp de este proyecto (transporte Meta, webhook
+> `/webhooks/whatsapp`, consentimiento al publicar, tablas `Aviso`,
+> `CuotaAvisos` y `EventoIntegracion`, columnas `Paciente.referenciaCrm` y
+> `Paciente.telefono`) **se retiró**: nunca se encendió y el emisor es el CRM.
+> El worker solo hace la limpieza horaria. El CRM lee la cola publicada y
+> vincula por PAC o, si no hay, por CI único. La plantilla
+> `montalvo_resultado_disponible` se creó en Meta ese día y está en revisión.
+> Donde lo de abajo diga otra cosa, manda [docs/operacion.md](docs/operacion.md)
+> y [docs/arquitectura.md](docs/arquitectura.md).
+
 Actualizado: **21 de septiembre de 2026**, zona horaria `America/La_Paz`.
 
 Este documento permite continuar desde otra máquina. Resume decisiones del usuario, implementación, despliegue, verificaciones y pendientes. **No contiene contraseñas, tokens, claves privadas ni datos de pacientes.** El estado de producción corresponde a la última verificación de esta sesión; antes de modificarla, comprobar su estado actual.

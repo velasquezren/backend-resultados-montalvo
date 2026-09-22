@@ -4,12 +4,12 @@ import { Actor } from '../auth/auth';
 import { accessCode, digest } from '../auth/crypto';
 import { AppConfig, CONFIG } from '../config';
 import { Database, Prisma, Transaction } from '../database';
-import { CrearInformeDto, InformesCrmDto, ListarDto, NotificarDto, PublicarDto, RetirarDto } from '../dto';
+import { CrearInformeDto, InformesCrmDto, ListarDto, PublicarDto, RetirarDto } from '../dto';
 import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 
 export function scope(actor: Actor): Prisma.InformeWhereInput { return actor.rol === 'ADMIN' ? {} : { medicoId: actor.id }; }
-const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true, telefono: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } }, aviso: { select: { estado: true, codigoError: true, intentos: true } } } satisfies Prisma.InformeInclude;
+const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } } } satisfies Prisma.InformeInclude;
 /**
  * La lista solo pinta paciente, estudio, fecha y estado. Traer el detalle
  * completo obligaba a Prisma a consultar cinco relaciones por página para
@@ -37,19 +37,22 @@ export class Results {
     return found;
   }
   /**
-   * Informes publicados de pacientes vinculados al CRM, para que éste arme la
-   * cola de avisos pendientes. Es una lectura administrativa: lleva el ID de
-   * acceso —que identifica pero no autoriza— y nunca el código, el PDF ni nada
+   * Informes publicados, para que el CRM arme la cola de entrega.
+   *
+   * Lleva los identificadores del paciente —nombre, PAC, CI— porque el
+   * vínculo lo resuelve el CRM contra sus propias fichas (PAC; si no hay, CI
+   * único) y la asistente compara el nombre antes de enviar. Lleva el ID de
+   * acceso, que identifica pero no autoriza, y nunca el código, el PDF ni nada
    * clínico. Si el acceso está vencido o revocado se dice, para que el CRM no
    * mande a un paciente a una puerta cerrada.
    */
   async publishedForCrm(dto: InformesCrmDto) {
-    const where: Prisma.InformeWhereInput = { estado: 'PUBLICADO', paciente: { referenciaCrm: { not: null } }, acceso: { isNot: null }, ...(dto.informeId ? { id: dto.informeId } : {}) };
+    const where: Prisma.InformeWhereInput = { estado: 'PUBLICADO', acceso: { isNot: null }, ...(dto.informeId ? { id: dto.informeId } : {}) };
     const [filas, total] = await this.db.$transaction([
       this.db.informe.findMany({
         where,
         select: { id: true, estudio: true, fechaEstudio: true, publicadoEn: true,
-          paciente: { select: { referenciaCrm: true } },
+          paciente: { select: { nombre: true, pac: true, ci: true } },
           acceso: { select: { id: true, expiraEn: true, revocadoEn: true } } },
         orderBy: [{ publicadoEn: 'desc' }, { id: 'desc' }],
         skip: (dto.pagina - 1) * dto.limite, take: dto.limite,
@@ -60,7 +63,7 @@ export class Results {
     return {
       datos: filas.map(fila => ({
         informeId: fila.id,
-        referenciaCrm: fila.paciente.referenciaCrm!,
+        paciente: fila.paciente,
         estudio: fila.estudio,
         fechaEstudio: fila.fechaEstudio,
         publicadoEn: fila.publicadoEn,
@@ -121,35 +124,12 @@ export class Results {
   }
   async publish(id: string, dto: PublicarDto, actor: Actor) {
     await this.ensure(id, actor);
-    if (dto.notificar && !this.config.notifications) problem(409, 'AVISOS_DESACTIVADOS', 'Los avisos aún no están configurados. Puedes publicar sin notificación y entregar el acceso al paciente.');
-    if (dto.notificar && !dto.telefonoConfirmado) problem(400, 'TELEFONO_NO_CONFIRMADO', 'Revisa y confirma el número del paciente antes de autorizar el aviso.');
-    if (dto.notificar && (!dto.consentimientoWhatsApp || !dto.consentimientoVersion)) problem(400, 'CONSENTIMIENTO_REQUERIDO', 'Confirma que el paciente autorizó este aviso de WhatsApp.');
     await this.db.$transaction(async tx => {
       const updated = await tx.informe.updateMany({ where: { id, ...scope(actor), revision: dto.revision, estado: 'BORRADOR', archivoId: { not: null } }, data: { estado: 'PUBLICADO', publicadoEn: new Date(), revision: { increment: 1 } } });
       if (!updated.count) problem(409, 'PUBLICACION_NO_DISPONIBLE', 'Adjunta el PDF y actualiza el informe antes de publicar. Puede haber sido publicado por otra persona.');
-      const report = await tx.informe.findUniqueOrThrow({ where: { id }, include: { paciente: true, acceso: true } });
-      if (!report.acceso || report.acceso.revocadoEn || report.acceso.expiraEn <= new Date()) problem(409, 'ACCESO_VENCIDO', 'Renueva y entrega el código de acceso al paciente antes de publicar.');
-      if (dto.notificar) {
-        if (!report.paciente.telefono) problem(400, 'TELEFONO_REQUERIDO', 'El paciente necesita un teléfono verificado para recibir el aviso.');
-        await tx.aviso.create({ data: { informeId: id, telefono: report.paciente.telefono, consentimientoEn: new Date(), consentimientoVersion: dto.consentimientoVersion!, autorizadoPor: actor.id } });
-      }
-      if (report.paciente.referenciaCrm) await tx.eventoIntegracion.create({ data: { tipo: 'RESULTADO_PUBLICADO', informeId: id, referenciaCrm: report.paciente.referenciaCrm } });
+      const acceso = await tx.accesoPaciente.findUnique({ where: { informeId: id } });
+      if (!acceso || acceso.revocadoEn || acceso.expiraEn <= new Date()) problem(409, 'ACCESO_VENCIDO', 'Renueva y entrega el código de acceso al paciente antes de publicar.');
       await this.audit(tx, actor.id, 'INFORME_PUBLICADO', id);
-    });
-    return this.get(id, actor);
-  }
-  async notify(id: string, dto: NotificarDto, actor: Actor) {
-    await this.ensure(id, actor);
-    if (!this.config.notifications) problem(409, 'AVISOS_DESACTIVADOS', 'Los avisos todavía no están configurados.');
-    await this.db.$transaction(async tx => {
-      const updated = await tx.informe.updateMany({ where: { id, ...scope(actor), estado: 'PUBLICADO', revision: dto.revision }, data: { revision: { increment: 1 } } });
-      if (!updated.count) problem(409, 'INFORME_CAMBIO', 'Actualiza el informe publicado antes de autorizar el aviso.');
-      const report = await tx.informe.findUniqueOrThrow({ where: { id }, include: { acceso: true, paciente: true, aviso: true } });
-      if (report.aviso) problem(409, 'AVISO_YA_REGISTRADO', 'Este informe ya tiene un aviso registrado. Revisa su estado antes de continuar.');
-      if (!report.acceso || report.acceso.revocadoEn || report.acceso.expiraEn <= new Date()) problem(409, 'ACCESO_VENCIDO', 'Renueva y entrega el acceso al paciente antes de notificar.');
-      if (!report.paciente.telefono) problem(400, 'TELEFONO_REQUERIDO', 'Registra el teléfono del paciente antes de notificar.');
-      await tx.aviso.create({ data: { informeId: id, telefono: report.paciente.telefono, consentimientoEn: new Date(), consentimientoVersion: dto.consentimientoVersion, autorizadoPor: actor.id } });
-      await this.audit(tx, actor.id, 'AVISO_AUTORIZADO', id);
     });
     return this.get(id, actor);
   }
@@ -160,9 +140,6 @@ export class Results {
       if (!updated.count) problem(409, 'INFORME_CAMBIO', 'El informe cambió. Actualízalo antes de retirarlo.');
       await tx.accesoPaciente.updateMany({ where: { informeId: id }, data: { revocadoEn: new Date() } });
       await tx.sesion.deleteMany({ where: { acceso: { informeId: id } } });
-      await tx.aviso.updateMany({ where: { informeId: id, estado: 'PENDIENTE' }, data: { estado: 'CANCELADO' } });
-      const report = await tx.informe.findUniqueOrThrow({ where: { id }, include: { paciente: true } });
-      if (report.paciente.referenciaCrm) await tx.eventoIntegracion.create({ data: { tipo: 'RESULTADO_RETIRADO', informeId: id, referenciaCrm: report.paciente.referenciaCrm } });
       await this.audit(tx, actor.id, 'INFORME_RETIRADO', id);
     });
     return this.get(id, actor);

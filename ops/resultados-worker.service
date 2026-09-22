@@ -1,18 +1,17 @@
-# Worker de avisos de resultados.
+# Mantenimiento de Resultados Montalvo.
 #
-# Drena la cola `Aviso` y, cada ~hora, purga sesiones vencidas y contadores de
-# intentos (`Notifications.cleanup`). Esa limpieza es la razón por la que
-# conviene tenerlo activo AUNQUE los avisos estén apagados: sin él, `Sesion` y
-# `LimiteIntentos` crecen indefinidamente.
+# Una vez por hora purga sesiones vencidas y contadores de intentos
+# (`Mantenimiento.limpiar`). Sin él, `Sesion` y `LimiteIntentos` crecen
+# indefinidamente.
 #
-# Con NOTIFICATIONS_ENABLED=false el ciclo sale de inmediato y NO envía nada ni
-# genera cargos. Activar los avisos es cambiar esa variable, no este archivo.
+# Hasta el 2026-09-22 este proceso también despachaba avisos de WhatsApp. Ese
+# camino se retiró sin haberse encendido: el emisor es el CRM.
 #
 # Instalar:
 #   cp ops/resultados-worker.service /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now resultados-worker
 [Unit]
-Description=Worker de avisos de resultados Montalvo
+Description=Mantenimiento de Resultados Montalvo
 After=network.target postgresql.service
 [Service]
 User=resultados
@@ -22,9 +21,9 @@ EnvironmentFile=/etc/montalvo-resultados/api.env
 ExecStart=/usr/bin/node dist/src/worker.js
 Restart=on-failure
 RestartSec=5
-# Más chico que el API: no procesa PDF, solo cola y HTTP a Meta.
-MemoryMax=256M
-CPUQuota=50%
+# Duerme casi siempre: dos DELETE por hora, sin PDF ni red externa.
+MemoryMax=160M
+CPUQuota=20%
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

@@ -10,23 +10,22 @@ import { PrivateFiles, PdfScanner } from './files/files';
 import { Results } from './results/results';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
-import { Notifications } from './notifications/notifications';
-import { MetaTransport, TRANSPORT } from './notifications/meta';
-import { AuthController, CrmEventsController, HealthController, MetaWebhookController, PatientsController, PortalController, ResultsController } from './controllers';
+import { Mantenimiento } from './mantenimiento/mantenimiento';
+import { AuthController, CrmIntegrationController, HealthController, PatientsController, PortalController, ResultsController } from './controllers';
 import { ApiErrors } from './errors';
 
 @Module({
-  controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, MetaWebhookController, CrmEventsController],
+  controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, CrmIntegrationController],
   providers: [
     { provide: CONFIG, useFactory: readConfig }, Database, Attempts, AuthService,
     { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner,
-    Patients, Results, PatientPortal, Notifications, { provide: TRANSPORT, useClass: MetaTransport },
+    Patients, Results, PatientPortal, Mantenimiento,
   ],
 })
 export class AppModule {}
 
 export async function createApp() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, logger: ['error', 'warn'] });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: ['error', 'warn'] });
   const config = app.get<ReturnType<typeof readConfig>>(CONFIG);
   app.set('trust proxy', 'loopback');
   app.use(helmet());

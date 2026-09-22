@@ -207,7 +207,6 @@ export default function DoctorPortal() {
         <ReportDetail
           key={selected.id}
           report={selected}
-          config={config}
           initialAccess={access}
           onChange={setSelected}
           onBack={() => {

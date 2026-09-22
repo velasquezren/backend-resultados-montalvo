@@ -45,12 +45,10 @@ export default function NewReport({
     setBusy(true);
     setError("");
     try {
-      const telefono = String(form.get("telefono") || "").trim();
       setPatient(
         await api<Patient>("v1/pacientes", "POST", {
           nombre: String(form.get("nombre")).trim(),
           [kind]: identifier.trim(),
-          ...(telefono ? { telefono } : {}),
         }),
       );
       setRegister(false);
@@ -159,20 +157,6 @@ export default function NewReport({
                     minLength={2}
                     maxLength={160}
                   />
-                </label>
-                <label>
-                  WhatsApp del paciente{" "}
-                  <span className="muted">(opcional)</span>
-                  <input
-                    name="telefono"
-                    type="tel"
-                    placeholder="+591…"
-                    pattern="\+[1-9][0-9]{7,14}"
-                  />
-                  <small>
-                    Incluye el código de país. Solo se usa si autorizas un
-                    aviso.
-                  </small>
                 </label>
                 <button disabled={busy}>Registrar paciente</button>
               </form>

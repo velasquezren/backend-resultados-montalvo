@@ -1,6 +1,6 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID, createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,9 +8,7 @@ import { PDFDocument } from 'pdf-lib';
 import { createApp } from '../src/app';
 import { Database } from '../src/database';
 import { AuthService } from '../src/auth/auth';
-import { Notifications } from '../src/notifications/notifications';
-import { DeliveryResult, NotificationInput, NotificationTransport, TRANSPORT } from '../src/notifications/meta';
-import { AppConfig, CONFIG } from '../src/config';
+import { Mantenimiento } from '../src/mantenimiento/mantenimiento';
 
 let app: Awaited<ReturnType<typeof createApp>>;
 let db: Database;
@@ -19,9 +17,6 @@ let medico: string;
 let otroMedico: string;
 let admin: string;
 let pdf: Buffer;
-let transport: NotificationTransport;
-let calls: NotificationInput[] = [];
-let answer: DeliveryResult = { estado: 'ACEPTADO', metaId: 'wamid.test' };
 type Report = { id: string; revision: number; estado: string; archivoId: string | null };
 type Created = { informe: Report; acceso: { id: string; codigo: string; url: string } };
 
@@ -35,27 +30,23 @@ async function upload(report: Report, token = medico, buffer = pdf) {
   const response = await fetch(`${base}/v1/informes/${report.id}/pdf`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   return { status: response.status, data: await response.json() as Report };
 }
-async function create(crm = false): Promise<Created> {
+async function create(identificadores?: { ci?: string; pac?: string }): Promise<Created> {
   const suffix = randomUUID();
-  const patient = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente sintético', ci: `CI-${suffix.slice(0, 12)}`, pac: `PAC-${suffix.slice(0, 12)}`, telefono: '+59170000000', ...(crm ? { referenciaCrm: suffix } : {}) }, crm ? admin : medico);
+  const patient = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente sintético', ...(identificadores ?? { ci: `CI-${suffix.slice(0, 12)}`, pac: `PAC-${suffix.slice(0, 12)}` }) }, medico);
   assert.equal(patient.status, 201);
   const result = await api<Created>('/v1/informes', 'POST', { pacienteId: patient.data.id, estudio: 'Ecografía de prueba', fechaEstudio: '2026-01-01' }, medico);
   assert.equal(result.status, 201);
   return result.data;
 }
-async function ready(crm = false): Promise<Created> {
-  const created = await create(crm); const uploaded = await upload(created.informe);
+async function ready(identificadores?: { ci?: string; pac?: string }): Promise<Created> {
+  const created = await create(identificadores); const uploaded = await upload(created.informe);
   assert.equal(uploaded.status, 201); return { ...created, informe: uploaded.data };
 }
-async function publish(report: Report, notify = false) {
-  return api<Report>(`/v1/informes/${report.id}/publicar`, 'POST', { revision: report.revision, pacienteYPdfConfirmados: true, notificar: notify, ...(notify ? { telefonoConfirmado: true, consentimientoWhatsApp: true, consentimientoVersion: 'resultados-v1' } : {}) }, medico);
+async function publish(report: Report) {
+  return api<Report>(`/v1/informes/${report.id}/publicar`, 'POST', { revision: report.revision, pacienteYPdfConfirmados: true }, medico);
 }
 async function patientLogin(access: Created['acceso']) {
   return api<{ token: string }>(`/v1/portal/accesos/${access.id}/ingresar`, 'POST', { codigo: access.codigo });
-}
-async function notificationReport() {
-  await db.aviso.updateMany({ where: { estado: 'PENDIENTE' }, data: { estado: 'CANCELADO' } });
-  const report = await ready(); assert.equal((await publish(report.informe, true)).status, 200); return report;
 }
 
 before(async () => {
@@ -63,17 +54,15 @@ before(async () => {
   if (!url || new URL(url).pathname !== '/resultados_test' || !['127.0.0.1', 'localhost'].includes(new URL(url).hostname)) throw new Error('Usa una base local exclusiva resultados_test');
   Object.assign(process.env, { NODE_ENV: 'test', RESULTADOS_DATABASE_URL: url, SESSION_HMAC_KEY: 'ab'.repeat(32),
     CORS_ORIGINS: 'http://localhost:3000', PATIENT_PORTAL_URL: 'http://localhost:3000/resultados', STORAGE_DRIVER: 'local',
-    NOTIFICATIONS_ENABLED: 'true', WHATSAPP_PHONE_NUMBER_ID: '123', WHATSAPP_TOKEN: 'ficticio', WHATSAPP_TEMPLATE: 'resultado_listo', META_APP_SECRET: 'secreto-ficticio-pruebas', META_VERIFY_TOKEN: 'verificacion-ficticia', CRM_INTEGRATION_TOKEN: 'c'.repeat(40),
+    CRM_INTEGRATION_TOKEN: 'c'.repeat(40),
     PRIVATE_STORAGE_DIR: await mkdtemp(join(tmpdir(), 'resultados-test-files-')),
   });
   delete process.env.CLAMAV_HOST;
   app = await createApp(); db = app.get(Database);
   // No datos de producción; guardia de nombre/host arriba y servidor aislado.
-  await db.$executeRawUnsafe('TRUNCATE TABLE "Sesion", "AccesoPaciente", "Aviso", "Archivo", "Informe", "Paciente", "Usuario", "Auditoria", "EventoIntegracion", "LimiteIntentos", "CuotaAvisos" RESTART IDENTITY CASCADE');
+  await db.$executeRawUnsafe('TRUNCATE TABLE "Sesion", "AccesoPaciente", "Archivo", "Informe", "Paciente", "Usuario", "Auditoria", "LimiteIntentos" RESTART IDENTITY CASCADE');
   const auth = app.get(AuthService);
   for (const [email, rol] of [['admin@prueba.test', 'ADMIN'], ['medico@prueba.test', 'MEDICO'], ['otro@prueba.test', 'MEDICO']] as const) await auth.createUser(email, email, 'clave-sintetica-pruebas', rol);
-  transport = app.get<NotificationTransport>(TRANSPORT);
-  transport.send = async input => { calls.push(input); return answer; };
   await app.listen(0, '127.0.0.1'); base = await app.getUrl();
   for (const email of ['admin', 'medico', 'otro']) {
     const login = await api<{ token: string }>('/v1/auth/login', 'POST', { email: `${email}@prueba.test`, password: 'clave-sintetica-pruebas' });
@@ -160,7 +149,7 @@ test('autorización real: otro médico no lista, lee, publica ni descarga el inf
   const report = await ready();
   assert.equal((await api(`/v1/informes/${report.informe.id}`, 'GET', undefined, otroMedico)).status, 404);
   assert.equal((await upload(report.informe, otroMedico)).status, 404);
-  assert.equal((await api(`/v1/informes/${report.informe.id}/publicar`, 'POST', { revision: report.informe.revision, pacienteYPdfConfirmados: true, notificar: false }, otroMedico)).status, 404);
+  assert.equal((await api(`/v1/informes/${report.informe.id}/publicar`, 'POST', { revision: report.informe.revision, pacienteYPdfConfirmados: true }, otroMedico)).status, 404);
   assert.equal((await fetch(`${base}/v1/informes/${report.informe.id}/pdf`, { headers: { Authorization: `Bearer ${otroMedico}` } })).status, 404);
   const list = await api<{ total: number }>('/v1/informes', 'GET', undefined, otroMedico); assert.equal(list.data.total, 0);
   assert.equal((await api(`/v1/informes/${report.informe.id}`, 'GET', undefined, admin)).status, 200);
@@ -177,21 +166,23 @@ test('dos cargas simultáneas no sobrescriben silenciosamente el mismo borrador'
   assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
   assert.equal(await db.archivo.count({ where: { informeId: report.informe.id } }), 1);
 });
-test('publicación concurrente: un informe publicado, un aviso y un evento para CRM', async () => {
-  const report = await ready(true);
-  const results = await Promise.all([publish(report.informe, true), publish(report.informe, true)]);
-  assert.deepEqual(results.map(r => r.status).sort(), [200, 409]);
-  assert.equal(await db.aviso.count({ where: { informeId: report.informe.id } }), 1);
-  assert.equal(await db.eventoIntegracion.count({ where: { informeId: report.informe.id } }), 1);
-});
-test('consentimiento y avisos desactivados: no se publica a medias', async () => {
+test('publicación concurrente: una sola publicación y una sola auditoría', async () => {
   const report = await ready();
-  assert.equal((await api(`/v1/informes/${report.informe.id}/publicar`, 'POST', { revision: report.informe.revision, pacienteYPdfConfirmados: true, notificar: true }, medico)).status, 400);
-  const config = app.get<AppConfig>(CONFIG); config.notifications = false;
-  assert.equal((await publish(report.informe, true)).status, 409);
-  config.notifications = true;
+  const results = await Promise.all([publish(report.informe), publish(report.informe)]);
+  assert.deepEqual(results.map(r => r.status).sort(), [200, 409]);
+  assert.equal(await db.auditoria.count({ where: { informeId: report.informe.id, accion: 'INFORME_PUBLICADO' } }), 1);
+});
+/* El aviso lo manda el CRM. Un portal viejo que aún mande los campos de
+   consentimiento recibe 400 y no publica: mejor que publicar creyendo que
+   se avisó al paciente. */
+test('publicar ya no acepta avisos: ni campos de consentimiento ni ruta de notificar', async () => {
+  const report = await ready();
+  const conAviso = await api(`/v1/informes/${report.informe.id}/publicar`, 'POST', { revision: report.informe.revision, pacienteYPdfConfirmados: true, notificar: true, consentimientoWhatsApp: true }, medico);
+  assert.equal(conAviso.status, 400);
   assert.equal((await db.informe.findUniqueOrThrow({ where: { id: report.informe.id } })).estado, 'BORRADOR');
-  assert.equal(await db.aviso.count({ where: { informeId: report.informe.id } }), 0);
+  assert.equal((await api(`/v1/informes/${report.informe.id}/notificar`, 'POST', { revision: report.informe.revision }, medico)).status, 404);
+  assert.equal((await api('/webhooks/whatsapp', 'POST', { entry: [] })).status, 404);
+  assert.equal((await api('/v1/pacientes', 'POST', { nombre: 'Con teléfono', ci: `CI-T-${randomUUID().slice(0, 8)}`, telefono: '+59170000000' }, medico)).status, 400);
 });
 test('paciente: borrador privado, publicación descargable y token ajeno al portal médico', async () => {
   const report = await ready(); const login = await patientLogin(report.acceso);
@@ -206,11 +197,10 @@ test('paciente: borrador privado, publicación descargable y token ajeno al port
   assert.equal('codigoHash' in detail.data, false); assert.equal('codigoHash' in (detail.data.acceso as object), false); assert.equal('codigo' in (detail.data.acceso as object), false);
 });
 test('retirar bloquea enlaces y sesiones existentes; no elimina el historial', async () => {
-  const report = await ready(); const published = await publish(report.informe, true); const login = await patientLogin(report.acceso);
+  const report = await ready(); const published = await publish(report.informe); const login = await patientLogin(report.acceso);
   assert.equal((await api(`/v1/informes/${report.informe.id}/retirar`, 'POST', { revision: published.data.revision, motivo: 'Documento incorrecto de prueba' }, medico)).status, 200);
   assert.equal((await api('/v1/portal/informe', 'GET', undefined, login.data.token)).status, 401);
   assert.equal((await patientLogin(report.acceso)).status, 401);
-  assert.equal((await db.aviso.findUniqueOrThrow({ where: { informeId: report.informe.id } })).estado, 'CANCELADO');
   assert.equal(await db.archivo.count({ where: { informeId: report.informe.id } }), 1);
 });
 test('rotar código revoca código y sesión anteriores', async () => {
@@ -221,75 +211,18 @@ test('rotar código revoca código y sesión anteriores', async () => {
   assert.equal((await api('/v1/portal/informe', 'GET', undefined, login.data.token)).status, 401);
   assert.equal((await patientLogin(renewed.data)).status, 200);
 });
-test('worker concurrente reclama una sola vez y no envía el PDF ni el código', async () => {
-  await notificationReport(); calls = []; answer = { estado: 'ACEPTADO', metaId: `wamid.${randomUUID()}` };
-  await Promise.all([app.get(Notifications).tick(), app.get(Notifications).tick()]);
-  assert.equal(calls.length, 1);
-  assert.deepEqual(Object.keys(calls[0]!).sort(), ['accesoId', 'id', 'intento', 'telefono']);
-});
-test('timeout queda incierto: volver a barrer no duplica ni cobra otro aviso', async () => {
-  const report = await notificationReport(); calls = []; answer = { estado: 'INCIERTO' };
-  await app.get(Notifications).tick(); await app.get(Notifications).tick();
-  assert.equal(calls.length, 1);
-  assert.equal((await db.aviso.findUniqueOrThrow({ where: { informeId: report.informe.id } })).estado, 'INCIERTO');
-});
-test('rechazo permanente no se reintenta', async () => {
-  const report = await notificationReport(); calls = []; answer = { estado: 'FALLIDO', codigo: 130497, reintentable: false };
-  await app.get(Notifications).tick(); await app.get(Notifications).tick();
-  assert.equal(calls.length, 1);
-  const job = await db.aviso.findUniqueOrThrow({ where: { informeId: report.informe.id } });
-  assert.equal(job.estado, 'FALLIDO'); assert.equal(job.codigoError, 130497);
-});
-test('reintento transitorio limitado a tres intentos totales', async () => {
-  const report = await notificationReport(); calls = []; answer = { estado: 'FALLIDO', codigo: 130429, reintentable: true };
-  for (let i = 0; i < 4; i++) {
-    await db.aviso.updateMany({ where: { informeId: report.informe.id }, data: { proximoIntento: new Date(0) } });
-    await app.get(Notifications).tick();
-  }
-  assert.equal(calls.length, 3);
-  assert.equal((await db.aviso.findUniqueOrThrow({ where: { informeId: report.informe.id } })).estado, 'FALLIDO');
-});
-test('límite diario impide nuevos envíos y conserva el aviso pendiente', async () => {
-  const report = await notificationReport(); calls = [];
-  const config = app.get<AppConfig>(CONFIG); const old = config.dailyLimit; config.dailyLimit = 1;
-  await app.get(Notifications).tick(); config.dailyLimit = old;
-  assert.equal(calls.length, 0);
-  assert.equal((await db.aviso.findUniqueOrThrow({ where: { informeId: report.informe.id } })).estado, 'PENDIENTE');
-});
-test('webhook firmado temprano y fuera de orden conserva el estado más avanzado', async () => {
-  const report = await notificationReport(); const service = app.get(Notifications);
-  transport.send = async input => {
-    const payload = { entry: [{ changes: [{ value: { metadata: { phone_number_id: '123' }, statuses: [{ id: 'wamid.temprano', status: 'read', biz_opaque_callback_data: `${input.id}:${input.intento}` }] } }] }] };
-    const json = JSON.stringify(payload);
-    const signature = `sha256=${createHmac('sha256', 'secreto-ficticio-pruebas').update(json).digest('hex')}`;
-    assert.equal((await fetch(`${base}/webhooks/whatsapp`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': signature }, body: json })).status, 200);
-    return { estado: 'ACEPTADO', metaId: 'wamid.temprano' };
-  };
-  await service.tick();
-  await service.receive({ entry: [{ changes: [{ value: { metadata: { phone_number_id: '123' }, statuses: [{ id: 'wamid.temprano', status: 'failed', errors: [{ code: 130497 }] }] } }] }] });
-  assert.equal((await db.aviso.findUniqueOrThrow({ where: { informeId: report.informe.id } })).estado, 'LEIDO');
-  assert.equal((await api('/webhooks/whatsapp', 'POST', { entry: [] })).status, 401);
-  transport.send = async input => { calls.push(input); return answer; };
-});
-test('CRM solo consulta eventos mínimos y su credencial no abre informes', async () => {
-  const denied = await api('/v1/integraciones/crm/eventos', 'GET', undefined, medico); assert.equal(denied.status, 401);
-  const events = await api<{ datos: Array<Record<string, unknown>> }>('/v1/integraciones/crm/eventos', 'GET', undefined, 'c'.repeat(40));
-  assert.equal(events.status, 200); assert.ok(events.data.datos.length > 0);
-  for (const event of events.data.datos) for (const key of ['ci', 'pac', 'pdf', 'codigo', 'telefono']) assert.equal(key in event, false);
-  assert.equal((await api('/v1/informes', 'GET', undefined, 'c'.repeat(40))).status, 401);
+test('la limpieza borra sesiones vencidas y conserva las vigentes', async () => {
+  const report = await ready();
+  assert.equal((await patientLogin(report.acceso)).status, 200);
+  await db.sesion.updateMany({ where: { accesoId: report.acceso.id }, data: { expiraEn: new Date(0) } });
+  assert.equal((await patientLogin(report.acceso)).status, 200);
+  await app.get(Mantenimiento).limpiar();
+  assert.equal(await db.sesion.count({ where: { accesoId: report.acceso.id } }), 1);
 });
 test('desactivar al médico revoca inmediatamente sus sesiones', async () => {
   const user = await db.usuario.findUniqueOrThrow({ where: { email: 'otro@prueba.test' } });
   assert.equal((await api(`/v1/auth/usuarios/${user.id}/desactivar`, 'POST', undefined, admin)).status, 200);
   assert.equal((await api('/v1/auth/yo', 'GET', undefined, otroMedico)).status, 401);
-});
-
-test('publicar sin aviso permite autorizarlo después una sola vez', async () => {
-  const report = await ready(); const published = await publish(report.informe);
-  const payload = { revision: published.data.revision, telefonoConfirmado: true, consentimientoWhatsApp: true, consentimientoVersion: 'resultados-v1' };
-  const responses = await Promise.all([api(`/v1/informes/${report.informe.id}/notificar`, 'POST', payload, medico), api(`/v1/informes/${report.informe.id}/notificar`, 'POST', payload, medico)]);
-  assert.deepEqual(responses.map(r => r.status).sort(), [200, 409]);
-  assert.equal(await db.aviso.count({ where: { informeId: report.informe.id } }), 1);
 });
 
 test('un acceso vencido impide iniciar sesión y descargar con sesión anterior', async () => {
@@ -298,13 +231,6 @@ test('un acceso vencido impide iniciar sesión y descargar con sesión anterior'
   assert.equal((await patientLogin(report.acceso)).status, 401);
   assert.equal((await api('/v1/portal/informe/pdf', 'GET', undefined, login.data.token)).status, 401);
 });
-test('autorizar WhatsApp exige confirmar teléfono y no admite confirmación implícita', async () => {
-  const report = await ready();
-  const result = await api(`/v1/informes/${report.informe.id}/publicar`, 'POST', { revision: report.informe.revision, pacienteYPdfConfirmados: true, notificar: true, consentimientoWhatsApp: true, consentimientoVersion: 'v1' }, medico);
-  assert.equal(result.status, 400);
-  assert.equal((await db.informe.findUniqueOrThrow({ where: { id: report.informe.id } })).estado, 'BORRADOR');
-});
-
 test('cambiar contraseña revoca sesiones y exige conocer la contraseña anterior', async () => {
   const auth = app.get(AuthService);
   await auth.createUser('cambio@prueba.test', 'Cambio', 'clave-inicial-pruebas', 'MEDICO');
@@ -316,41 +242,34 @@ test('cambiar contraseña revoca sesiones y exige conocer la contraseña anterio
   assert.equal((await api('/v1/auth/login','POST',{email:'cambio@prueba.test',password:'clave-nueva-pruebas'})).status,200);
 });
 
-test('el vínculo con el CRM se deriva del PAC en forma canónica', async () => {
+test('la cola del CRM lista los informes publicados con los identificadores del paciente, sin el código', async () => {
   const n = randomUUID().slice(0, 8).toUpperCase();
-  // El médico teclea el PAC a mano: guiones y minúsculas no deben romper el cruce.
-  const conGuion = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente guion', pac: `pac-${n}` }, medico);
-  assert.equal(conGuion.status, 201);
-  assert.equal((await db.paciente.findUniqueOrThrow({ where: { id: conGuion.data.id } })).referenciaCrm, `PAC${n}`);
-
-  // Sin PAC no hay vínculo: el CRM identifica por PAC, no por CI.
-  const soloCi = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Paciente sin pac', ci: `CI-X-${n}` }, medico);
-  assert.equal(soloCi.status, 201);
-  assert.equal((await db.paciente.findUniqueOrThrow({ where: { id: soloCi.data.id } })).referenciaCrm, null);
-
-  // Un médico no puede imponer el vínculo a mano; sigue siendo de ADMIN.
-  assert.equal((await api('/v1/pacientes', 'POST', { nombre: 'Paciente ajeno', pac: `PAC-Z-${n}`, referenciaCrm: 'INVENTADO' }, medico)).status, 403);
-});
-
-test('la cola del CRM lista informes publicados vinculados, sin filtrar el código', async () => {
-  const informe = await ready();
+  const informe = await ready({ pac: `pac-${n}` });
+  /* Un paciente solo con CI también entra: el CRM decide si lo reconoce. */
+  const soloCi = await ready({ ci: `ci-${n}` });
+  assert.equal((await publish(soloCi.informe)).status, 200);
   assert.equal((await publish(informe.informe)).status, 200);
 
   assert.equal((await api('/v1/integraciones/crm/informes', 'GET')).status, 401);
   assert.equal((await api('/v1/integraciones/crm/informes', 'GET', undefined, 'token-corto')).status, 401);
 
-  type Fila = { informeId: string; referenciaCrm: string; accesoId: string; accesoVigente: boolean; estudio: string };
+  type Fila = { informeId: string; paciente: { nombre: string; pac: string | null; ci: string | null }; accesoId: string; accesoVigente: boolean; estudio: string };
   const cola = await api<{ datos: Fila[]; total: number; totalPaginas: number }>('/v1/integraciones/crm/informes?limite=100', 'GET', undefined, 'c'.repeat(40));
   assert.equal(cola.status, 200);
   const fila = cola.data.datos.find(item => item.informeId === informe.informe.id);
   assert.ok(fila, 'el informe publicado debe aparecer en la cola');
   assert.equal(fila.accesoId, informe.acceso.id);
   assert.equal(fila.accesoVigente, true);
+  assert.deepEqual(fila.paciente, { nombre: 'Paciente sintético', pac: `PAC-${n}`, ci: null });
+  assert.deepEqual(cola.data.datos.find(item => item.informeId === soloCi.informe.id)?.paciente, { nombre: 'Paciente sintético', pac: null, ci: `CI-${n}` });
 
   // Lo que NO puede viajar al CRM.
   const crudo = JSON.stringify(cola.data);
   assert.equal(crudo.includes(informe.acceso.codigo), false, 'el código de acceso no puede salir');
-  for (const clave of ['codigo', 'codigoHash', 'pdf', 'sha256', 'telefono', 'ci']) assert.equal(clave in fila, false, `sobra ${clave}`);
+  for (const clave of ['codigo', 'codigoHash', 'pdf', 'sha256', 'archivoId', 'medico']) assert.equal(clave in fila, false, `sobra ${clave}`);
+  assert.equal(Object.keys(fila.paciente).sort().join(), 'ci,nombre,pac', 'del paciente solo viajan nombre, PAC y CI');
+  /* La credencial de integración no abre la API de los médicos. */
+  assert.equal((await api('/v1/informes', 'GET', undefined, 'c'.repeat(40))).status, 401);
 
   // Un borrador no está publicado: no debe aparecer.
   const borrador = await ready();

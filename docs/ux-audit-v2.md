@@ -1,5 +1,7 @@
 # Auditoría UX V2 — Clínica Montalvo
 
+> **Nota del 2026-09-22.** Las partes de este documento sobre autorizar el aviso de WhatsApp al publicar, confirmar teléfono y consentimiento, y el estado del aviso en el portal ya no aplican: ese camino se retiró y el aviso lo envía recepción desde el CRM, donde se ve su estado. El resto de la auditoría sigue vigente.
+
 Fecha: 21 de septiembre de 2026. Primera etapa: auditoría de código, propuesta y prioridades. **No rediseño implementado ni prueba con pacientes.** Prioridad inmediata: entrega de ecografías; reservas y pagos son una fase posterior.
 
 ## Alcance y evidencia

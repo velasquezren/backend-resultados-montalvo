@@ -1,15 +1,12 @@
-import { Body, Controller, Get, Headers, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query, RawBodyRequest, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
-import { createHmac } from 'node:crypto';
 import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth';
 import { equalSecret } from './auth/crypto';
-import { CONFIG, AppConfig } from './config';
 import { Database } from './database';
-import { BuscarPacienteDto, CodigoDto, CrearInformeDto, EventosDto, InformesCrmDto, ListarDto, LoginDto, PasswordDto, NotificarDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
+import { BuscarPacienteDto, CodigoDto, CrearInformeDto, InformesCrmDto, ListarDto, LoginDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
 import { MAX_PDF_BYTES } from './files/files';
-import { Notifications } from './notifications/notifications';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
 import { Results } from './results/results';
@@ -56,8 +53,8 @@ export class PatientsController {
 
 @Controller('v1/informes')
 export class ResultsController {
-  constructor(private readonly results: Results, private readonly attempts: Attempts, @Inject(CONFIG) private readonly config: AppConfig) {}
-  @Get('configuracion') async configuration() { return { tipo: 'ECOGRAFIA', maxPdfBytes: MAX_PDF_BYTES, notificacionesHabilitadas: this.config.notifications, limiteAvisosDiario: this.config.dailyLimit, avisoCosto: 'WhatsApp puede generar cargos. Revisa el destinatario y confirma el aviso antes de publicar.', accesoPaciente: 'CODIGO_ENTREGADO_EN_CLINICA', estudiosFrecuentes: await this.results.studyNames() }; }
+  constructor(private readonly results: Results, private readonly attempts: Attempts) {}
+  @Get('configuracion') async configuration() { return { tipo: 'ECOGRAFIA', maxPdfBytes: MAX_PDF_BYTES, accesoPaciente: 'CODIGO_ENTREGADO_EN_CLINICA', estudiosFrecuentes: await this.results.studyNames() }; }
   @Get() list(@Query() dto: ListarDto, @Req() req: AuthRequest) { return this.results.list(dto, req.actor); }
   @Post() create(@Body() dto: CrearInformeDto, @Req() req: AuthRequest) { return this.results.create(dto, req.actor); }
   @Get(':id') get(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) { return this.results.get(id, req.actor); }
@@ -69,7 +66,6 @@ export class ResultsController {
     return this.results.upload(id, dto.revision, file.buffer, req.actor);
   }
   @Post(':id/publicar') @HttpCode(200) publish(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PublicarDto, @Req() req: AuthRequest) { return this.results.publish(id, dto, req.actor); }
-  @Post(':id/notificar') @HttpCode(200) notify(@Param('id', ParseUUIDPipe) id: string, @Body() dto: NotificarDto, @Req() req: AuthRequest) { return this.results.notify(id, dto, req.actor); }
   @Post(':id/retirar') @HttpCode(200) withdraw(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RetirarDto, @Req() req: AuthRequest) { return this.results.withdraw(id, dto, req.actor); }
   @Post(':id/acceso/renovar') @HttpCode(200) renew(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) { return this.results.renewAccess(id, req.actor); }
   @Get(':id/pdf') async download(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest, @Res() response: Response) {
@@ -90,41 +86,18 @@ export class PortalController {
 }
 
 @Public()
-@Controller('webhooks/whatsapp')
-export class MetaWebhookController {
-  constructor(private readonly notifications: Notifications) {}
-  @Get() verify(@Query() query: Record<string, unknown>, @Res() res: Response) {
-    const secret = process.env.META_VERIFY_TOKEN;
-    if (!secret || query['hub.mode'] !== 'subscribe' || typeof query['hub.verify_token'] !== 'string' || !equalSecret(query['hub.verify_token'], secret) || typeof query['hub.challenge'] !== 'string') problem(403, 'VERIFICACION_INVALIDA', 'Verificación no autorizada.');
-    res.status(200).type('text/plain').send(query['hub.challenge']);
-  }
-  @Post() @HttpCode(200) async receive(@Req() req: RawBodyRequest<Request>, @Headers('x-hub-signature-256') signature?: string) {
-    const secret = process.env.META_APP_SECRET;
-    if (!secret || !req.rawBody || !signature || !equalSecret(signature, `sha256=${createHmac('sha256', secret).update(req.rawBody).digest('hex')}`)) problem(401, 'FIRMA_INVALIDA', 'Evento no autorizado.');
-    await this.notifications.receive(req.body as unknown);
-    return { recibido: true };
-  }
-}
-
-@Public()
 @Controller('v1/integraciones/crm')
-export class CrmEventsController {
-  constructor(private readonly db: Database, private readonly results: Results, private readonly attempts: Attempts) {}
+export class CrmIntegrationController {
+  constructor(private readonly results: Results, private readonly attempts: Attempts) {}
   /** Una sola definición de la credencial: dos copias divergen. */
   private authorize(req: Request): void {
     const expected = process.env.CRM_INTEGRATION_TOKEN;
     if (!expected || expected.length < 32 || !equalSecret(bearer(req), expected)) problem(401, 'INTEGRACION_NO_AUTORIZADA', 'Integración no autorizada.');
   }
-  /** Cola de avisos pendientes para el CRM: qué informes publicados hay y a qué enlace apuntan. */
+  /** Cola de entrega del CRM: qué informes publicados hay, de quién y a qué enlace apuntan. */
   @Get('informes') async reports(@Query() dto: InformesCrmDto, @Req() req: Request) {
     this.authorize(req);
     await this.attempts.consume('crm-informes', 'consumer', 60, 60);
     return this.results.publishedForCrm(dto);
-  }
-  @Get('eventos') async events(@Query() dto: EventosDto, @Req() req: Request) {
-    this.authorize(req);
-    await this.attempts.consume('crm-eventos', 'consumer', 60, 60);
-    const datos = await this.db.eventoIntegracion.findMany({ where: { secuencia: { gt: dto.despues } }, orderBy: { secuencia: 'asc' }, take: dto.limite });
-    return { datos, siguiente: datos.at(-1)?.secuencia ?? dto.despues };
   }
 }

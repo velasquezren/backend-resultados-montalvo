@@ -24,7 +24,7 @@ export function allowed(path: string, method: string): boolean {
       "v1/portal/salir",
     ].includes(path) ||
     new RegExp(
-      `^v1/informes/${uuid}/(pdf|publicar|notificar|retirar|acceso/renovar)$`,
+      `^v1/informes/${uuid}/(pdf|publicar|retirar|acceso/renovar)$`,
       "i",
     ).test(path) ||
     new RegExp(`^v1/portal/accesos/${uuid}/ingresar$`, "i").test(path)
