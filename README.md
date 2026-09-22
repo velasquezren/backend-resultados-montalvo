@@ -1,5 +1,7 @@
 # Resultados Montalvo
 
+**Continuar desde otra máquina:** leer [CONTEXTO_CONTINUIDAD.md](CONTEXTO_CONTINUIDAD.md) para conocer el estado desplegado, los pendientes y los archivos privados que no viajan con Git.
+
 API independiente para que médicos registren pacientes por CI/PAC, adjunten un PDF de ecografía, lo revisen y lo publiquen para consulta privada del paciente. El CRM no autentica médicos ni almacena informes.
 
 **Estado:** backend y portal independiente Next desplegados y verificados en https://resultados.107.175.132.15.nip.io/. El portal está en `portal/` y conserva la identidad visual de la web institucional. WhatsApp viene desactivado; no se ha enviado ningún mensaje ni solicitado aprobación de una plantilla desde este proyecto.
