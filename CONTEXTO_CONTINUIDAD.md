@@ -1,5 +1,31 @@
 # Contexto de continuidad — Montalvo
 
+> **Actualización 23 de septiembre de 2026 — manda sobre todo lo de abajo.**
+>
+> - **Todo está en `main` y desplegado.** Ningún repositorio tiene cambios
+>   locales: clonar GitHub basta para continuar. Versión activa en el servidor:
+>   `releases/20260923-1911-pagina-paciente`.
+> - **El enlace es la llave**: el paciente abre su informe desde el botón del
+>   WhatsApp, sin código. El aviso lo manda el CRM con la plantilla aprobada
+>   `montalvo_resultado_disponible` (su texto aún menciona un código que ya no
+>   se pide). `montalvo_informe_disponible` está en revisión en Meta.
+> - **Página del paciente rediseñada** al estilo del CRM, con su propio marco
+>   (`portal/app/resultados/layout.tsx`, Poppins, tokens en `.pac`). El portal
+>   de médicos está en `portal/app/(medico)/`; las URL no cambiaron.
+> - **Vista previa en WhatsApp**: `portal/app/resultados/opengraph-image.tsx`
+>   (genérica, sin datos del paciente). `robots.txt` solo deja pasar a los
+>   lectores de vista previa de WhatsApp/Facebook en `/resultados/`; sigue el
+>   `noindex`.
+> - **Imagen de cabecera** para la plantilla futura con imagen:
+>   `/resultados/imagen-aviso` (PNG 1200×628). Plantillas preparadas y sin
+>   enviar a Meta: `docs/plantillas-whatsapp.md` del **backend del CRM**.
+> - Borrados de producción (con respaldo previo) los informes de prueba
+>   «Rene»/«ppe». Queda un informe de prueba «Clinica Montalvo»
+>   (PAC `PRUEBA-7761`), vinculado en el CRM a la ficha del 77617610.
+> - La contraseña inicial de `doctor@montalvo.com` **ya no es válida** (se
+>   cambió). No existe cuenta de médico de prueba: crearla quedó pendiente de
+>   autorización del propietario.
+
 > **Actualización 22 de septiembre de 2026 — lo que cambió respecto de lo de abajo.**
 > El camino de avisos por WhatsApp de este proyecto (transporte Meta, webhook
 > `/webhooks/whatsapp`, consentimiento al publicar, tablas `Aviso`,
