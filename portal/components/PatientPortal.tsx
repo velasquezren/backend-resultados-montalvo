@@ -22,17 +22,18 @@ const whatsapp = (texto: string) =>
   `https://wa.me/${WHATSAPP_CLINICA}?text=${encodeURIComponent(texto)}`;
 const AYUDA = whatsapp("Hola, necesito ayuda para ver mi resultado.");
 
-/* Íconos de trazo, del tamaño del texto; sin librería para cuatro dibujos. */
-const Icono = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+/* Íconos de trazo, del tamaño del texto; sin librería para cinco dibujos. */
+const Icono = ({ d, tam = 18 }: { d: string; tam?: number }) => (
+  <svg viewBox="0 0 24 24" width={tam} height={tam} fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d={d} />
   </svg>
 );
-const CHECK = "M20 6 9 17l-5-5";
 const DOCUMENTO = "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5";
 const CANDADO = "M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4";
 const CALENDARIO = "M7 3v3M17 3v3M4 8h16M5 5h14v16H5z";
+const MENSAJE = "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z";
+const FLECHA = "M9 6l6 6-6 6";
 
 /**
  * Consulta del paciente. El enlace del WhatsApp es la llave: la página se abre
@@ -71,81 +72,83 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
   }, [abrir]);
 
   return (
-    <section className="login patient">
+    <div className="pac-pantalla">
       {estado.tipo === "abriendo" && (
-        <div className="resultado resultado-cargando" role="status" aria-label="Abriendo tu resultado">
-          <span className="esqueleto esqueleto-chip" />
-          <span className="esqueleto esqueleto-titulo" />
-          <span className="esqueleto esqueleto-linea" />
-          <span className="esqueleto esqueleto-boton" />
-        </div>
+        <article className="pac-tarjeta" role="status" aria-label="Abriendo tu resultado">
+          <span className="pac-esqueleto" style={{ width: 96, height: 24, borderRadius: 999 }} />
+          <span className="pac-esqueleto" style={{ width: "78%", height: 30, marginTop: 18 }} />
+          <span className="pac-esqueleto" style={{ width: "52%", height: 16, marginTop: 10 }} />
+          <span className="pac-esqueleto" style={{ width: "100%", height: 52, marginTop: 28, borderRadius: 999 }} />
+        </article>
       )}
+
       {estado.tipo === "listo" && (
         <>
-          <article className="resultado">
-            <p className="resultado-estado">
-              <span className="resultado-check"><Icono d={CHECK} /></span>
-              {estado.result.disponible ? "Tu informe está listo" : "Tu informe"}
-            </p>
-            <h1>{estado.result.estudio}</h1>
-            <p className="resultado-meta">
-              {dateLabel(estado.result.fechaEstudio)}
-              {estado.result.medico && <> · {estado.result.medico}</>}
+          <article className="pac-tarjeta">
+            <span className="pac-estado">
+              <i className="pac-punto" aria-hidden="true" />
+              {estado.result.disponible ? "Listo para ver" : "Tu informe"}
+            </span>
+            <h1 className="pac-titulo">{estado.result.estudio}</h1>
+            <p className="pac-meta">
+              <span>{dateLabel(estado.result.fechaEstudio)}</span>
+              {estado.result.medico && <span>{estado.result.medico}</span>}
             </p>
             {estado.result.disponible ? (
               <>
-                <a className="button primary patient-open" href="/api/v1/portal/informe/pdf"
-                  target="_blank" rel="noreferrer">
-                  <Icono d={DOCUMENTO} /> Ver mi informe
+                <a className="pac-boton" href="/api/v1/portal/informe/pdf" target="_blank" rel="noreferrer">
+                  <Icono d={DOCUMENTO} /> Ver informe
                 </a>
-                <p className="resultado-nota">
-                  Se abre en el visor de tu teléfono. Desde ahí puedes guardarlo o
-                  compartirlo con tu médico.
-                </p>
+                <p className="pac-nota">Se abre en el visor de tu teléfono, desde donde puedes guardarlo.</p>
               </>
             ) : (
-              <p role="status" className="notice">{estado.result.mensaje}</p>
+              <p role="status" className="pac-aviso">{estado.result.mensaje}</p>
             )}
           </article>
 
-          {/* El siguiente paso natural después de recibir un resultado. */}
-          <a className="siguiente-paso" rel="noreferrer" target="_blank"
-            href={whatsapp(`Hola, recibí mi resultado de ${estado.result.estudio} y quiero agendar una consulta para revisarlo.`)}>
-            <span className="siguiente-icono"><Icono d={CALENDARIO} /></span>
-            <span>
-              <strong>¿Quieres revisarlo con tu médico?</strong>
-              <small>Agenda una consulta por WhatsApp</small>
-            </span>
-            <span className="siguiente-flecha" aria-hidden="true">›</span>
-          </a>
+          <nav className="pac-lista" aria-label="Qué más puedes hacer">
+            <a className="pac-fila" rel="noreferrer" target="_blank"
+              href={whatsapp(`Hola, recibí mi resultado de ${estado.result.estudio} y quiero agendar una consulta para revisarlo.`)}>
+              <span className="pac-fila-icono"><Icono d={CALENDARIO} /></span>
+              <span className="pac-fila-texto">
+                <strong>Agendar una consulta</strong>
+                <small>Revísalo con tu médico</small>
+              </span>
+              <Icono d={FLECHA} tam={16} />
+            </a>
+            <a className="pac-fila" href={AYUDA} rel="noreferrer" target="_blank">
+              <span className="pac-fila-icono"><Icono d={MENSAJE} /></span>
+              <span className="pac-fila-texto">
+                <strong>¿Necesitas ayuda?</strong>
+                <small>Escríbenos por WhatsApp</small>
+              </span>
+              <Icono d={FLECHA} tam={16} />
+            </a>
+          </nav>
 
-          <p className="privado"><Icono d={CANDADO} /> Este enlace es personal. Por tu privacidad, no lo reenvíes.</p>
+          <p className="pac-privado"><Icono d={CANDADO} tam={14} /> Enlace personal. Por tu privacidad, no lo reenvíes.</p>
         </>
       )}
+
       {estado.tipo === "enlace-inactivo" && (
-        <div className="resultado">
-          <h1>Este enlace ya no está activo</h1>
-          <p className="lead">{estado.mensaje}</p>
-          <a className="button primary" href={whatsapp("Hola, mi enlace de resultados venció. ¿Me pueden enviar uno nuevo?")} rel="noreferrer" target="_blank">
-            Pedir un enlace nuevo
+        <article className="pac-tarjeta">
+          <h1 className="pac-titulo">Este enlace ya no está activo</h1>
+          <p className="pac-texto">{estado.mensaje}</p>
+          <a className="pac-boton" rel="noreferrer" target="_blank"
+            href={whatsapp("Hola, mi enlace de resultados venció. ¿Me pueden enviar uno nuevo?")}>
+            <Icono d={MENSAJE} /> Pedir un enlace nuevo
           </a>
-        </div>
+        </article>
       )}
+
       {estado.tipo === "error" && (
-        <div className="resultado">
-          <h1>No pudimos abrir tu resultado</h1>
-          <div role="alert">
-            <p className="error">{estado.mensaje}</p>
-          </div>
-          <button className="primary" onClick={() => void abrir()}>
-            Intentar de nuevo
-          </button>
-        </div>
+        <article className="pac-tarjeta" role="alert">
+          <h1 className="pac-titulo">No pudimos abrir tu resultado</h1>
+          <p className="pac-texto">{estado.mensaje}</p>
+          <button className="pac-boton" onClick={() => void abrir()}>Intentar de nuevo</button>
+          <a className="pac-enlace" href={AYUDA} rel="noreferrer" target="_blank">Escríbenos por WhatsApp</a>
+        </article>
       )}
-      <p className="ayuda-pie">
-        ¿Problemas para verlo?{" "}
-        <a href={AYUDA} rel="noreferrer" target="_blank">Escríbenos por WhatsApp</a>
-      </p>
-    </section>
+    </div>
   );
 }

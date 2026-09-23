@@ -576,165 +576,243 @@ dialog p {
   }
 }
 
-/* El botón que abre el informe es lo único que el paciente vino a hacer:
-   ancho completo y alto cómodo para el pulgar. */
-.patient-open {
+/* ── Página del paciente ────────────────────────────────────────────────
+   El estilo del CRM: Poppins, su paleta cerrada, tarjetas de 16 px, botón en
+   píldora y sombras sutiles. Los tokens viven en `.pac` para no tocar el
+   portal de trabajo de los médicos. Una sola columna de 440 px: en el
+   teléfono todo cabe en la primera pantalla. */
+.pac {
+  --pac-primario: #006156;
+  --pac-primario-hover: #00524a;
+  --pac-secundario: #39ada3;
+  --pac-claro: #eaf7f5;
+  --pac-fondo: #f8f9fa;
+  --pac-texto: #1f2937;
+  --pac-tenue: #6b7280;
+  --pac-borde: #e5e7eb;
+  --pac-sombra: 0 4px 20px rgba(0, 0, 0, 0.06);
+  min-height: 100dvh;
   display: flex;
+  flex-direction: column;
+  background: var(--pac-fondo);
+  color: var(--pac-texto);
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.pac-marca {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 20px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--pac-primario);
+}
+.pac-contenido {
+  flex: 1;
   width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 20px 16px 32px;
+}
+.pac-pie {
+  padding: 20px;
   text-align: center;
-  padding: 17px 20px;
-  font-size: 17px;
-  margin-top: 28px;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0, 97, 86, 0.25);
+  font-size: 12px;
+  color: var(--pac-tenue);
 }
-
-/* ── Pantalla del paciente ─────────────────────────────────────────────
-   Una tarjeta que dice «está listo» antes que nada, el botón, y el paso
-   siguiente. Todo entra en la primera pantalla de un teléfono. */
-.patient {
-  margin-top: 40px;
-}
-.resultado {
-  padding: 28px 24px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--background);
-  box-shadow: 0 10px 30px rgba(0, 69, 61, 0.08);
-  animation: resultado-entra 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.resultado h1 {
-  font-size: clamp(26px, 6vw, 34px);
-  margin: 14px 0 6px;
-}
-.resultado-estado {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 6px 12px 6px 6px;
-  border-radius: 999px;
-  background: var(--wash);
-  color: var(--primary);
-  font-size: 14px;
-  font-weight: 600;
-}
-.resultado-check {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--primary);
-  color: white;
-}
-.resultado-check svg {
-  width: 15px;
-  height: 15px;
-  stroke-width: 3;
-}
-.resultado-meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: 15px;
-}
-.resultado-nota {
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-}
-.siguiente-paso {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 16px;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  color: var(--text);
-  text-decoration: none;
-  background: var(--wash);
-  transition: border-color 0.15s, transform 0.15s;
-  animation: resultado-entra 0.35s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.siguiente-paso:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-.siguiente-paso strong {
-  display: block;
-  font-size: 15px;
-}
-.siguiente-paso small {
-  color: var(--muted);
-}
-.siguiente-icono {
-  display: inline-flex;
-  flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  background: white;
-  color: var(--primary);
-}
-.siguiente-flecha {
-  margin-left: auto;
-  font-size: 26px;
-  color: var(--accent);
-}
-.privado {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 20px 4px 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-.privado svg {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-}
-.ayuda-pie {
-  margin-top: 28px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-.ayuda-pie a {
-  color: var(--primary);
-  font-weight: 600;
-}
-
-/* Mientras abre: la silueta de la tarjeta, no un texto que cambia. */
-.resultado-cargando {
+.pac-pantalla {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-.esqueleto {
-  display: block;
-  border-radius: 10px;
-  background: linear-gradient(90deg, var(--wash) 25%, #e8f2f0 50%, var(--wash) 75%);
-  background-size: 200% 100%;
-  animation: esqueleto-brillo 1.2s linear infinite;
-}
-.esqueleto-chip { width: 170px; height: 38px; border-radius: 999px; }
-.esqueleto-titulo { width: 80%; height: 34px; }
-.esqueleto-linea { width: 55%; height: 18px; }
-.esqueleto-boton { width: 100%; height: 58px; margin-top: 14px; border-radius: 12px; }
 
-@keyframes resultado-entra {
-  from { opacity: 0; transform: translateY(8px); }
+.pac-tarjeta {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 24px 24px;
+  background: white;
+  border: 1px solid var(--pac-borde);
+  border-radius: 16px;
+  box-shadow: var(--pac-sombra);
+  animation: pac-entra 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pac-estado {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--pac-claro);
+  color: var(--pac-primario);
+  font-size: 12px;
+  font-weight: 500;
+}
+.pac-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--pac-secundario);
+  box-shadow: 0 0 0 3px rgba(57, 173, 163, 0.18);
+}
+.pac-titulo {
+  margin: 16px 0 6px;
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--pac-texto);
+}
+.pac-meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 14px;
+  color: var(--pac-tenue);
+}
+/* Separador «·» desde el CSS: un dato ausente no deja un punto suelto. */
+.pac-meta > * + *::before {
+  content: "·";
+  margin: 0 8px;
+}
+.pac-texto {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--pac-tenue);
+}
+
+.pac-boton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 24px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pac-primario);
+  color: white;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.pac-boton:hover {
+  background: var(--pac-primario-hover);
+  color: white;
+}
+.pac-boton:active {
+  transform: scale(0.98);
+}
+.pac-nota {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--pac-tenue);
+}
+.pac-aviso {
+  margin: 20px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--pac-fondo);
+  font-size: 14px;
+  color: var(--pac-tenue);
+}
+.pac-enlace {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pac-primario);
+}
+
+/* Lo que se puede hacer después, como una lista de ajustes: callada, al
+   alcance, sin competir con el botón del informe. */
+.pac-lista {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 1px solid var(--pac-borde);
+  border-radius: 16px;
+  overflow: hidden;
+  animation: pac-entra 0.4s 0.06s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pac-fila {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  color: var(--pac-tenue);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.pac-fila + .pac-fila {
+  border-top: 1px solid var(--pac-borde);
+}
+.pac-fila:hover {
+  background: var(--pac-fondo);
+}
+.pac-fila-icono {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--pac-claro);
+  color: var(--pac-primario);
+}
+.pac-fila-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.pac-fila-texto strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--pac-texto);
+}
+.pac-fila-texto small {
+  font-size: 12px;
+  color: var(--pac-tenue);
+}
+.pac-privado {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--pac-tenue);
+}
+
+/* Mientras abre: la silueta de la tarjeta, sin textos que cambian. */
+.pac-esqueleto {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f1f3f5 25%, #e9ecef 50%, #f1f3f5 75%);
+  background-size: 200% 100%;
+  animation: pac-brillo 1.2s linear infinite;
+}
+
+@keyframes pac-entra {
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
-@keyframes esqueleto-brillo {
+@keyframes pac-brillo {
   to { background-position: -200% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .resultado, .siguiente-paso, .esqueleto { animation: none; }
+  .pac-tarjeta, .pac-lista, .pac-esqueleto { animation: none; }
+  .pac-boton { transition: none; }
 }
