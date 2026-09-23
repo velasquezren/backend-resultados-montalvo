@@ -18,7 +18,7 @@ El proceso escucha únicamente en 127.0.0.1. En producción colocarlo detrás de
 
 Buscar paciente por CI/PAC exacto → confirmar identidad → crear borrador → adjuntar PDF → descargar y revisar → publicar. El borrador se conserva en servidor. Antes de publicar, se puede reemplazar el archivo. El paciente recibe un comprobante con código y enlace; WhatsApp, cuando esté configurado, solo envía el enlace.
 
-El botón de imprimir genera un comprobante de acceso. El código solo se muestra al crear/renovar; no es recuperable luego. Renovar y retirar explican sus consecuencias en un diálogo de pantalla completa en móvil.
+El informe muestra el enlace del paciente y su vencimiento; no hay código ni comprobante que entregar: el enlace lo envía recepción por WhatsApp y abre el informe directamente. Renovar y retirar explican sus consecuencias en un diálogo de pantalla completa en móvil.
 
 El administrador puede crear cuentas médicas; no existe recuperación por email ni envío automático de credenciales. No usar cuentas compartidas. El portal no envía WhatsApp: al publicar, el informe aparece en la cola de recepción del CRM, que es quien avisa al paciente.
 

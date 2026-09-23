@@ -12,7 +12,6 @@ export type Patient = {
 };
 export type Access = {
   id: string;
-  codigo?: string;
   url?: string;
   expiraEn?: string;
 };

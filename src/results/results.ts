@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { Actor } from '../auth/auth';
-import { accessCode, digest } from '../auth/crypto';
 import { AppConfig, CONFIG } from '../config';
 import { Database, Prisma, Transaction } from '../database';
 import { CrearInformeDto, InformesCrmDto, ListarDto, PublicarDto, RetirarDto } from '../dto';
@@ -53,7 +52,7 @@ export class Results {
         where,
         select: { id: true, estudio: true, fechaEstudio: true, publicadoEn: true,
           paciente: { select: { nombre: true, pac: true, ci: true } },
-          acceso: { select: { id: true, expiraEn: true, revocadoEn: true } } },
+          acceso: { select: { id: true, expiraEn: true, revocadoEn: true, abiertoEn: true } } },
         orderBy: [{ publicadoEn: 'desc' }, { id: 'desc' }],
         skip: (dto.pagina - 1) * dto.limite, take: dto.limite,
       }),
@@ -69,6 +68,8 @@ export class Results {
         publicadoEn: fila.publicadoEn,
         accesoId: fila.acceso!.id,
         accesoVigente: !fila.acceso!.revocadoEn && fila.acceso!.expiraEn > ahora,
+        accesoExpiraEn: fila.acceso!.expiraEn,
+        abiertoEn: fila.acceso!.abiertoEn,
       })),
       total, pagina: dto.pagina, limite: dto.limite, totalPaginas: Math.ceil(total / dto.limite),
     };
@@ -87,13 +88,12 @@ export class Results {
     const fecha = new Date(`${dto.fechaEstudio}T00:00:00.000Z`);
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     if (!Number.isFinite(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== dto.fechaEstudio || dto.fechaEstudio > today || dto.fechaEstudio < '1900-01-01') problem(400, 'FECHA_INVALIDA', 'Indica la fecha real del estudio, sin usar una fecha futura.');
-    const codigo = accessCode();
     const result = await this.db.$transaction(async tx => {
       if (!await tx.paciente.findUnique({ where: { id: dto.pacienteId } })) problem(404, 'PACIENTE_NO_ENCONTRADO', 'Selecciona un paciente registrado.');
       const report = await tx.informe.create({ data: { ...dto, estudio: dto.estudio.trim(), fechaEstudio: fecha, medicoId: actor.id } });
-      const access = await tx.accesoPaciente.create({ data: { informeId: report.id, codigoHash: digest(codigo, this.config.hmacKey), expiraEn: new Date(Date.now() + 30 * 86400_000) } });
+      const access = await tx.accesoPaciente.create({ data: { informeId: report.id, expiraEn: vencimiento() } });
       await this.audit(tx, actor.id, 'INFORME_CREADO', report.id);
-      return { informe: report, acceso: { id: access.id, codigo, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` } };
+      return { informe: report, acceso: { id: access.id, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` } };
     });
     return result;
   }
@@ -144,21 +144,42 @@ export class Results {
     });
     return this.get(id, actor);
   }
+  /**
+   * Extiende el acceso 30 días desde hoy. El enlace es el mismo —es la llave
+   * y ya está en el WhatsApp del paciente—, así que renovar no le obliga a
+   * esperar otro mensaje. Para cortar un enlace que no debía salir, se retira.
+   */
   async renewAccess(id: string, actor: Actor) {
     const report = await this.ensure(id, actor);
     if (report.estado === 'RETIRADO') problem(409, 'INFORME_RETIRADO', 'Un informe retirado no puede volver a habilitarse.');
-    const codigo = accessCode();
     const access = await this.db.$transaction(async tx => {
       await tx.informe.update({ where: { id }, data: { revision: { increment: 1 } } });
-      const current = await tx.informe.findUniqueOrThrow({ where: { id } });
-      if (current.estado === 'RETIRADO') problem(409, 'INFORME_RETIRADO', 'Un informe retirado no puede volver a habilitarse.');
-      await tx.$queryRaw`SELECT id FROM "AccesoPaciente" WHERE "informeId" = ${id}::uuid FOR UPDATE`;
-      await tx.sesion.deleteMany({ where: { acceso: { informeId: id } } });
-      const renewed = await tx.accesoPaciente.update({ where: { informeId: id }, data: { codigoHash: digest(codigo, this.config.hmacKey), revocadoEn: null, expiraEn: new Date(Date.now() + 30 * 86400_000) } });
+      const renewed = await this.extender(tx, id);
       await this.audit(tx, actor.id, 'ACCESO_RENOVADO', id);
       return renewed;
     });
-    return { id: access.id, codigo, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` };
+    return { id: access.id, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` };
+  }
+  /**
+   * La misma renovación, pedida por el CRM cuando recepción reenvía un aviso
+   * cuyo acceso venció. Solo informes publicados: un borrador o un retirado no
+   * se reabren desde fuera.
+   */
+  async renewAccessForCrm(id: string) {
+    const renewed = await this.db.$transaction(async tx => {
+      const informe = await tx.informe.findUnique({ where: { id }, select: { estado: true } });
+      if (informe?.estado !== 'PUBLICADO') problem(404, 'INFORME_NO_ENCONTRADO', 'Ese informe no está publicado.');
+      const acceso = await this.extender(tx, id);
+      await this.audit(tx, 'crm', 'ACCESO_RENOVADO_CRM', id);
+      return acceso;
+    });
+    return { accesoId: renewed.id, expiraEn: renewed.expiraEn };
+  }
+  private async extender(tx: Transaction, informeId: string) {
+    await tx.$queryRaw`SELECT id FROM "AccesoPaciente" WHERE "informeId" = ${informeId}::uuid FOR UPDATE`;
+    const actual = await tx.accesoPaciente.findUniqueOrThrow({ where: { informeId } });
+    if (actual.revocadoEn) problem(409, 'ACCESO_REVOCADO', 'El acceso de este informe fue revocado al retirarlo.');
+    return tx.accesoPaciente.update({ where: { informeId }, data: { expiraEn: vencimiento() } });
   }
   async download(id: string, actor: Actor) {
     const report = await this.ensure(id, actor);
@@ -174,4 +195,9 @@ export class Results {
     return buffer;
   }
   private audit(tx: Transaction, actorId: string, accion: string, informeId: string) { return tx.auditoria.create({ data: { actorId, accion, informeId } }); }
+}
+
+/** El acceso del paciente dura 30 días desde que se crea o se renueva. */
+function vencimiento(): Date {
+  return new Date(Date.now() + 30 * 86400_000);
 }

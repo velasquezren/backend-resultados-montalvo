@@ -1,5 +1,5 @@
 "use client";
-import { Access } from "@/lib/types";
+import { Access, dateLabel } from "@/lib/types";
 export function message(error: unknown) {
   return error instanceof Error
     ? error.message
@@ -29,29 +29,21 @@ export function Feedback({
     </>
   );
 }
+/**
+ * El enlace del paciente. Es la llave de su informe: quien lo abre lo ve, sin
+ * código. No se entrega en papel: recepción lo envía por WhatsApp desde el CRM.
+ */
 export function AccessCard({ access }: { access: Access }) {
+  const url = access.url || `${window.location.origin}/resultados/${access.id}`;
   return (
     <section className="access-card">
-      <h3>Acceso del paciente</h3>
-      {access.codigo ? (
-        <>
-          <p>
-            Entrega este código al paciente en la clínica. Se muestra una sola
-            vez; no lo envíes en el mismo mensaje que el enlace.
-          </p>
-          <strong className="access-code">{access.codigo}</strong>
-        </>
-      ) : (
-        <p>
-          Usa el código entregado al paciente. Si se perdió, puedes renovarlo.
-        </p>
-      )}
-      <p className="break">
-        {access.url || `${window.location.origin}/resultados/${access.id}`}
+      <h3>Enlace del paciente</h3>
+      <p>
+        Recepción se lo enviará por WhatsApp al publicar. Al abrirlo verá su
+        informe directamente, sin códigos.
+        {access.expiraEn && <> Vence el {dateLabel(access.expiraEn)}.</>}
       </p>
-      <button type="button" onClick={() => window.print()}>
-        Imprimir comprobante
-      </button>
+      <p className="break">{url}</p>
     </section>
   );
 }

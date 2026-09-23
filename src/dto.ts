@@ -50,10 +50,6 @@ export class InformesCrmDto {
   /** Un solo informe: el CRM revalida contra el portal justo antes de enviar. */
   @IsOptional() @IsUUID() informeId?: string;
 }
-export class CodigoDto {
-  @IsString() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.toUpperCase().replace(/[ -]/g, '') : value)
-  @Matches(/^[A-Z2-9]{12}$/) codigo!: string;
-}
 export class PasswordDto {
   @IsString() @Length(1, 128) actual!: string;
   @IsString() @Length(12, 128) nueva!: string;

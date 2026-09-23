@@ -77,7 +77,7 @@ export default function ReportDetail({
         }),
       );
       setNotice(
-        "Informe publicado. Entrega el código al paciente; recepción le enviará el enlace por WhatsApp.",
+        "Informe publicado. Recepción le enviará el enlace al paciente por WhatsApp.",
       );
     });
   }
@@ -193,8 +193,8 @@ export default function ReportDetail({
               consentimiento, y el médico no envía nada. */}
           <p className="muted">
             Al publicar, el informe aparece en la cola de recepción del CRM, que
-            le envía al paciente el enlace por WhatsApp. El código no viaja en el
-            mensaje: entrégalo en la clínica.
+            le envía al paciente el enlace por WhatsApp. Al abrirlo verá su
+            informe directamente.
           </p>
           <div className="sticky-action">
             <p>El paciente podrá consultar el resultado cuando lo publiques.</p>
@@ -219,7 +219,7 @@ export default function ReportDetail({
             disabled={busy}
             onClick={() => renewDialog.current?.showModal()}
           >
-            Renovar código de acceso
+            Extender el enlace 30 días
           </button>
           <button
             className="danger"
@@ -244,15 +244,15 @@ export default function ReportDetail({
               onChange(await api<Report>(`v1/informes/${report.id}`));
               renewDialog.current?.close();
               setNotice(
-                "Código renovado. Entrega el nuevo código al paciente.",
+                "Enlace extendido 30 días. El paciente puede volver a abrir el mismo mensaje.",
               );
             });
           }}
         >
-          <h2>Renovar acceso</h2>
+          <h2>Extender el enlace</h2>
           <p>
-            El código anterior y las sesiones abiertas dejarán de funcionar.
-            Entrega el nuevo código al paciente.
+            El enlace que el paciente ya tiene vuelve a funcionar durante 30 días
+            más. Para cortarlo del todo, retira el informe.
           </p>
           <Feedback error={error} />
           <div className="actions">
@@ -264,7 +264,7 @@ export default function ReportDetail({
               Cancelar
             </button>
             <button className="primary" disabled={busy}>
-              Renovar código
+              Extender 30 días
             </button>
           </div>
         </form>

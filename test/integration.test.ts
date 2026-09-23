@@ -18,7 +18,7 @@ let otroMedico: string;
 let admin: string;
 let pdf: Buffer;
 type Report = { id: string; revision: number; estado: string; archivoId: string | null };
-type Created = { informe: Report; acceso: { id: string; codigo: string; url: string } };
+type Created = { informe: Report; acceso: { id: string; url: string; expiraEn: string } };
 
 async function api<T>(path: string, method = 'GET', body?: unknown, token?: string) {
   const response = await fetch(`${base}${path}`, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -45,8 +45,8 @@ async function ready(identificadores?: { ci?: string; pac?: string }): Promise<C
 async function publish(report: Report) {
   return api<Report>(`/v1/informes/${report.id}/publicar`, 'POST', { revision: report.revision, pacienteYPdfConfirmados: true }, medico);
 }
-async function patientLogin(access: Created['acceso']) {
-  return api<{ token: string }>(`/v1/portal/accesos/${access.id}/ingresar`, 'POST', { codigo: access.codigo });
+async function patientLogin(access: Pick<Created['acceso'], 'id'>) {
+  return api<{ token: string }>(`/v1/portal/accesos/${access.id}/ingresar`, 'POST');
 }
 
 before(async () => {
@@ -194,7 +194,7 @@ test('paciente: borrador privado, publicación descargable y token ajeno al port
   assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store, private');
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), pdf);
   const detail = await api<Record<string, unknown>>(`/v1/informes/${report.informe.id}`, 'GET', undefined, medico);
-  assert.equal('codigoHash' in detail.data, false); assert.equal('codigoHash' in (detail.data.acceso as object), false); assert.equal('codigo' in (detail.data.acceso as object), false);
+  assert.equal('codigoHash' in (detail.data.acceso as object), false); assert.equal('codigo' in (detail.data.acceso as object), false);
 });
 test('retirar bloquea enlaces y sesiones existentes; no elimina el historial', async () => {
   const report = await ready(); const published = await publish(report.informe); const login = await patientLogin(report.acceso);
@@ -203,13 +203,50 @@ test('retirar bloquea enlaces y sesiones existentes; no elimina el historial', a
   assert.equal((await patientLogin(report.acceso)).status, 401);
   assert.equal(await db.archivo.count({ where: { informeId: report.informe.id } }), 1);
 });
-test('rotar código revoca código y sesión anteriores', async () => {
-  const report = await ready(); const login = await patientLogin(report.acceso);
+/* El enlace es la llave: abrirlo basta, sin código. */
+test('el paciente abre su informe solo con el enlace y queda registrado que lo abrió', async () => {
+  const report = await ready();
+  assert.equal('codigo' in report.acceso, false, 'ya no se genera código');
+  assert.equal((await api(`/v1/portal/accesos/${randomUUID()}/ingresar`, 'POST')).status, 401);
+  const antes = await patientLogin(report.acceso);
+  assert.equal(antes.status, 200);
+  /* Ver la espera de un borrador no cuenta como «abierto». */
+  await api('/v1/portal/informe', 'GET', undefined, antes.data.token);
+  assert.equal((await db.accesoPaciente.findUniqueOrThrow({ where: { id: report.acceso.id } })).abiertoEn, null);
+  assert.equal((await publish(report.informe)).status, 200);
+  const login = await patientLogin(report.acceso);
+  assert.equal((await api('/v1/portal/informe', 'GET', undefined, login.data.token)).status, 200);
+  const primera = (await db.accesoPaciente.findUniqueOrThrow({ where: { id: report.acceso.id } })).abiertoEn;
+  assert.ok(primera);
+  await api('/v1/portal/informe', 'GET', undefined, login.data.token);
+  assert.deepEqual((await db.accesoPaciente.findUniqueOrThrow({ where: { id: report.acceso.id } })).abiertoEn, primera, 'se guarda la PRIMERA apertura');
+  const pdf = await fetch(`${base}/v1/portal/informe/pdf`, { headers: { Authorization: `Bearer ${login.data.token}` } });
+  assert.equal(pdf.headers.get('content-disposition')?.startsWith('inline'), true, 'se abre en el visor del teléfono');
+});
+test('renovar extiende el mismo enlace: el vencido vuelve a abrir sin mandar otro', async () => {
+  const report = await ready(); assert.equal((await publish(report.informe)).status, 200);
+  await db.accesoPaciente.update({ where: { id: report.acceso.id }, data: { expiraEn: new Date(0) } });
+  assert.equal((await patientLogin(report.acceso)).status, 401);
   const renewed = await api<Created['acceso']>(`/v1/informes/${report.informe.id}/acceso/renovar`, 'POST', undefined, medico);
   assert.equal(renewed.status, 200);
-  assert.equal((await patientLogin(report.acceso)).status, 401);
-  assert.equal((await api('/v1/portal/informe', 'GET', undefined, login.data.token)).status, 401);
-  assert.equal((await patientLogin(renewed.data)).status, 200);
+  assert.equal(renewed.data.id, report.acceso.id);
+  assert.equal((await patientLogin(report.acceso)).status, 200);
+});
+test('el CRM renueva el acceso de un publicado, y solo con su credencial', async () => {
+  const report = await ready(); assert.equal((await publish(report.informe)).status, 200);
+  await db.accesoPaciente.update({ where: { id: report.acceso.id }, data: { expiraEn: new Date(0) } });
+  const ruta = `/v1/integraciones/crm/informes/${report.informe.id}/acceso/renovar`;
+  assert.equal((await api(ruta, 'POST', undefined, medico)).status, 401);
+  const ok = await api<{ accesoId: string; expiraEn: string }>(ruta, 'POST', undefined, 'c'.repeat(40));
+  assert.equal(ok.status, 200);
+  assert.equal(ok.data.accesoId, report.acceso.id);
+  assert.ok(new Date(ok.data.expiraEn) > new Date());
+  /* Un borrador no se reabre desde fuera, ni un retirado. */
+  const borrador = await ready();
+  assert.equal((await api(`/v1/integraciones/crm/informes/${borrador.informe.id}/acceso/renovar`, 'POST', undefined, 'c'.repeat(40))).status, 404);
+  const actual = await api<{ revision: number }>(`/v1/informes/${report.informe.id}`, 'GET', undefined, medico);
+  await api(`/v1/informes/${report.informe.id}/retirar`, 'POST', { revision: actual.data.revision, motivo: 'prueba de renovación' }, medico);
+  assert.equal((await api(ruta, 'POST', undefined, 'c'.repeat(40))).status, 404);
 });
 test('la limpieza borra sesiones vencidas y conserva las vigentes', async () => {
   const report = await ready();
@@ -242,7 +279,7 @@ test('cambiar contraseña revoca sesiones y exige conocer la contraseña anterio
   assert.equal((await api('/v1/auth/login','POST',{email:'cambio@prueba.test',password:'clave-nueva-pruebas'})).status,200);
 });
 
-test('la cola del CRM lista los informes publicados con los identificadores del paciente, sin el código', async () => {
+test('la cola del CRM lista los informes publicados con los identificadores del paciente', async () => {
   const n = randomUUID().slice(0, 8).toUpperCase();
   const informe = await ready({ pac: `pac-${n}` });
   /* Un paciente solo con CI también entra: el CRM decide si lo reconoce. */
@@ -253,7 +290,7 @@ test('la cola del CRM lista los informes publicados con los identificadores del 
   assert.equal((await api('/v1/integraciones/crm/informes', 'GET')).status, 401);
   assert.equal((await api('/v1/integraciones/crm/informes', 'GET', undefined, 'token-corto')).status, 401);
 
-  type Fila = { informeId: string; paciente: { nombre: string; pac: string | null; ci: string | null }; accesoId: string; accesoVigente: boolean; estudio: string };
+  type Fila = { informeId: string; paciente: { nombre: string; pac: string | null; ci: string | null }; accesoId: string; accesoVigente: boolean; accesoExpiraEn: string; abiertoEn: string | null; estudio: string };
   const cola = await api<{ datos: Fila[]; total: number; totalPaginas: number }>('/v1/integraciones/crm/informes?limite=100', 'GET', undefined, 'c'.repeat(40));
   assert.equal(cola.status, 200);
   const fila = cola.data.datos.find(item => item.informeId === informe.informe.id);
@@ -263,9 +300,8 @@ test('la cola del CRM lista los informes publicados con los identificadores del 
   assert.deepEqual(fila.paciente, { nombre: 'Paciente sintético', pac: `PAC-${n}`, ci: null });
   assert.deepEqual(cola.data.datos.find(item => item.informeId === soloCi.informe.id)?.paciente, { nombre: 'Paciente sintético', pac: null, ci: `CI-${n}` });
 
-  // Lo que NO puede viajar al CRM.
-  const crudo = JSON.stringify(cola.data);
-  assert.equal(crudo.includes(informe.acceso.codigo), false, 'el código de acceso no puede salir');
+  assert.equal(fila.abiertoEn, null, 'nadie lo abrió todavía');
+  assert.ok(fila.accesoExpiraEn, 'el CRM sabe cuándo vence el enlace');
   for (const clave of ['codigo', 'codigoHash', 'pdf', 'sha256', 'archivoId', 'medico']) assert.equal(clave in fila, false, `sobra ${clave}`);
   assert.equal(Object.keys(fila.paciente).sort().join(), 'ci,nombre,pac', 'del paciente solo viajan nombre, PAC y CI');
   /* La credencial de integración no abre la API de los médicos. */

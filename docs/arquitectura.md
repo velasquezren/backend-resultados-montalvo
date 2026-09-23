@@ -28,9 +28,9 @@ Un solo módulo Nest reúne estos servicios para evitar estructura ceremonial. N
 
 ## Acceso y privacidad
 
-Contraseñas scrypt; sesiones y códigos persistidos como HMAC. Clave HMAC exclusiva del servicio. Sesiones del médico, del paciente y credencial CRM no son intercambiables. Sesión médica de 8 horas; sesión paciente de 15 minutos; código válido 30 días y renovable.
+Contraseñas scrypt; sesiones persistidas como HMAC. Clave HMAC exclusiva del servicio. Sesiones del médico, del paciente y credencial CRM no son intercambiables. Sesión médica de 8 horas; sesión paciente de 15 minutos; código válido 30 días y renovable.
 
-No usar CI ni PAC como contraseña. El enlace identifica el acceso; el código autoriza la consulta. Cambiar código revoca sesiones anteriores. No existe búsqueda pública de resultados por nombre o documento.
+**El enlace es la llave (desde el 2026-09-23).** El ID de acceso es un UUID aleatorio de 122 bits: no se adivina ni se recorre (límites por IP y por acceso). Quien tenga el mensaje ve el informe; la clínica lo asumió a cambio de quitarle al paciente el código de 12 caracteres en papel. Lo que protege: vencimiento a 30 días, retiro inmediato del informe, registro de la primera apertura (`abiertoEn`) y que el PDF no viaja en el chat. No usar CI ni PAC como contraseña. No existe búsqueda pública de resultados por nombre o documento.
 
 No se publican URLs directas de R2: la API verifica sesión y estado antes de entregar bytes. La integridad SHA-256 se comprueba al descargar. `Cache-Control: no-store, private`, `Referrer-Policy: no-referrer`, sin indexación. Nunca añadir analítica que capture contenido clínico, códigos, tokens o cuerpos HTTP.
 
@@ -38,7 +38,7 @@ Los médicos pueden localizar pacientes por identificador exacto, pero no explor
 
 ## Integración CRM
 
-El CRM es el único emisor de WhatsApp. Lee la cola con `GET /v1/integraciones/crm/informes`: informes **publicados**, paginados, con credencial exclusiva de solo lectura (`CRM_INTEGRATION_TOKEN`), por loopback en el mismo servidor. Cada fila lleva `informeId`, `estudio`, `fechaEstudio`, `publicadoEn`, `accesoId`, `accesoVigente` y `paciente: { nombre, pac, ci }`. Nunca viajan el código, su hash, el PDF, el médico ni nada clínico. El ID de acceso identifica; el código autoriza. Con `?informeId=` devuelve solo ese, para que el CRM revalide justo antes de enviar.
+El CRM es el único emisor de WhatsApp. Lee la cola con `GET /v1/integraciones/crm/informes`: informes **publicados**, paginados, con credencial exclusiva (`CRM_INTEGRATION_TOKEN`) que solo lee la cola y renueva enlaces de informes publicados, por loopback en el mismo servidor. Cada fila lleva `informeId`, `estudio`, `fechaEstudio`, `publicadoEn`, `accesoId`, `accesoVigente`, `accesoExpiraEn`, `abiertoEn` y `paciente: { nombre, pac, ci }`. Nunca viajan el código, su hash, el PDF, el médico ni nada clínico. El ID de acceso identifica; el código autoriza. Con `?informeId=` devuelve solo ese, para que el CRM revalide justo antes de enviar.
 
 **El vínculo lo resuelve el CRM, no este sistema.** Con los identificadores de la fila busca entre sus fichas: primero el PAC (único allí), y si no hay o no cruza, el CI **solo si coincide con exactamente una ficha** en forma canónica (mayúsculas, sin separadores). Un CI repetido en el CRM no se vincula a ninguna: se le muestra a recepción para corregir las fichas. Con CI, el CRM enseña el nombre del portal junto al de la ficha para que recepción confirme antes de enviar. Lo que sigue prohibido es vincular por nombre o por coincidencias aproximadas.
 
@@ -58,7 +58,7 @@ La creación de borrador no tiene clave de idempotencia: ante respuesta perdida,
 
 ## Evolución
 
-1. Validar flujo operativo de identificación, entrega del código y retiro.
+1. Validar flujo operativo de identificación, envío del enlace y retiro.
 2. Portal médico mínimo y consulta paciente implementados en `portal/`; validar ahora el uso con profesionales y pacientes antes de producción.
 3. Probar almacenamiento y antivirus reales, backup/restauración y acceso móvil. El envío por WhatsApp lo prueba el CRM con la plantilla aprobada.
 4. Activar producción con métricas y volumen limitado.

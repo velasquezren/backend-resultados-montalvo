@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth';
 import { equalSecret } from './auth/crypto';
 import { Database } from './database';
-import { BuscarPacienteDto, CodigoDto, CrearInformeDto, InformesCrmDto, ListarDto, LoginDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
+import { BuscarPacienteDto, CrearInformeDto, InformesCrmDto, ListarDto, LoginDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
 import { MAX_PDF_BYTES } from './files/files';
 import { Patients } from './results/patients';
@@ -79,9 +79,9 @@ export class ResultsController {
 @Controller('v1/portal')
 export class PortalController {
   constructor(private readonly portal: PatientPortal, private readonly attempts: Attempts) {}
-  @Post('accesos/:id/ingresar') @HttpCode(200) login(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CodigoDto, @Req() req: Request) { return this.portal.login(id, dto.codigo, req.ip ?? 'unknown'); }
+  @Post('accesos/:id/ingresar') @HttpCode(200) login(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) { return this.portal.login(id, req.ip ?? 'unknown'); }
   @Get('informe') async detail(@Req() req: Request) { await this.attempts.consume('portal', req.ip ?? 'unknown', 120, 60); return this.portal.detail(bearer(req)); }
-  @Get('informe/pdf') async download(@Req() req: Request, @Res() response: Response) { await this.attempts.consume('descarga-paciente', req.ip ?? 'unknown', 30, 60); fileResponse(response, await this.portal.download(bearer(req))); }
+  @Get('informe/pdf') async download(@Req() req: Request, @Res() response: Response) { await this.attempts.consume('descarga-paciente', req.ip ?? 'unknown', 30, 60); fileResponse(response, await this.portal.download(bearer(req)), 'inline'); }
   @Post('salir') @HttpCode(200) logout(@Req() req: Request) { return this.portal.logout(bearer(req)); }
 }
 
@@ -94,10 +94,16 @@ export class CrmIntegrationController {
     const expected = process.env.CRM_INTEGRATION_TOKEN;
     if (!expected || expected.length < 32 || !equalSecret(bearer(req), expected)) problem(401, 'INTEGRACION_NO_AUTORIZADA', 'Integración no autorizada.');
   }
-  /** Cola de entrega del CRM: qué informes publicados hay, de quién y a qué enlace apuntan. */
+  /** Cola de entrega del CRM: qué informes publicados hay, de quién, a qué enlace apuntan y si ya se abrieron. */
   @Get('informes') async reports(@Query() dto: InformesCrmDto, @Req() req: Request) {
     this.authorize(req);
     await this.attempts.consume('crm-informes', 'consumer', 60, 60);
     return this.results.publishedForCrm(dto);
+  }
+  /** Recepción reenvía un aviso cuyo acceso venció: 30 días más, mismo enlace. */
+  @Post('informes/:id/acceso/renovar') @HttpCode(200) async renew(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    this.authorize(req);
+    await this.attempts.consume('crm-renovar', 'consumer', 30, 60);
+    return this.results.renewAccessForCrm(id);
   }
 }

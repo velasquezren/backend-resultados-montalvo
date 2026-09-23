@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
-import { accessCode, digest, hashPassword, verifyPassword } from '../src/auth/crypto';
+import { digest, hashPassword, token, verifyPassword } from '../src/auth/crypto';
 import { validatePdf } from '../src/files/files';
 import { readConfig } from '../src/config';
 
@@ -11,10 +11,10 @@ test('las contraseñas usan sal y nunca se conservan como texto', async () => {
   assert.equal(await verifyPassword('contraseña-sintetica-123', hash), true);
   assert.equal(await verifyPassword('otra', hash), false);
 });
-test('códigos de paciente independientes de CI/PAC y digests vinculados a la clave', () => {
-  const codes = new Set(Array.from({ length: 100 }, accessCode));
-  assert.equal(codes.size, 100);
-  for (const code of codes) assert.match(code, /^[A-Z2-9]{12}$/);
+test('tokens de sesión aleatorios y digests vinculados a la clave', () => {
+  const tokens = new Set(Array.from({ length: 100 }, token));
+  assert.equal(tokens.size, 100);
+  for (const t of tokens) assert.ok(t.length >= 43, 'al menos 256 bits en base64url');
   assert.notEqual(digest('mismo', 'clave-1'), digest('mismo', 'clave-2'));
 });
 test('PDF válido: cuenta páginas y calcula integridad', async () => {

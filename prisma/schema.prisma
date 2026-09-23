@@ -92,8 +92,10 @@ model AccesoPaciente {
   id String @id @default(uuid()) @db.Uuid
   informeId String @unique @db.Uuid
   informe Informe @relation(fields: [informeId], references: [id])
-  codigoHash String
   expiraEn DateTime
+  /// Primera vez que el paciente abrió su informe. El CRM lo muestra para
+  /// que recepción siga solo a quien no lo abrió.
+  abiertoEn DateTime?
   revocadoEn DateTime?
   sesiones Sesion[]
 }

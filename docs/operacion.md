@@ -10,58 +10,34 @@ Este repositorio no configura dominios, infraestructura, facturación ni proveed
 4. Configurar HTTPS, CORS exacto, clave HMAC, URL real del portal y credenciales independientes. Reverse proxy local compatible con `trust proxy=loopback`; si es remoto, configurar explícitamente los proxies confiables antes de usar límites por IP.
 5. Ejecutar migración una sola vez antes de iniciar nuevas instancias. `NODE_ENV=production` obliga R2 privado o disco cifrado, y ClamAV; no desactivarlo para eludir un fallo de configuración.
 6. Iniciar API y worker de mantenimiento como procesos distintos, usuario sin privilegios, reinicio supervisado y límites de CPU/RAM. El worker solo purga cada hora sesiones vencidas y contadores de intentos.
-7. Crear usuarios individuales. Probar médico A/B, paciente, sesión vencida, código renovado y retiro. No reutilizar la cuenta de recepción del CRM.
+7. Crear usuarios individuales. Probar médico A/B, paciente, enlace vencido y extendido, y retiro. No reutilizar la cuenta de recepción del CRM.
 8. Configurar y desplegar el portal Next de `portal/`. Comprobar que ninguna ruta privada esté en sitemap/robots indexable, caché compartida o analítica. El backend por sí solo no hace accesible la pantalla del enlace.
 
 La memoria de ClamAV y el análisis PDF requieren dimensionamiento. Recomendación inicial: servicio de resultados en infraestructura separada del CRM cuando el presupuesto lo permita, sin introducir múltiples servicios de negocio. Un VPS compartido necesita límites efectivos y pruebas de saturación antes de confiarle carga clínica.
 
 ## Plantilla de aviso (la envía el CRM)
 
-**Creada en Meta el 2026-09-22** en la WABA de la línea *Recepción Clínica Montalvo*, id `2137598870221549`, enviada a revisión (`PENDING`). La usa el CRM: `RESULTADOS_PLANTILLA=montalvo_resultado_disponible` y `RESULTADOS_LINEA_ID` = la línea de Recepción. Este proyecto no envía WhatsApp.
-
-Verificado el 2026-09-22 contra producción: `PATIENT_PORTAL_URL=https://resultados.107.175.132.15.nip.io/resultados`, y esa ruta más el UUID del acceso responde 200 pidiendo el código de 12 caracteres.
+**Creada en Meta el 2026-09-22** en la WABA de la línea *Recepción Clínica Montalvo*, id `2137598870221549`, nombre `montalvo_resultado_disponible`, en revisión. La usa el CRM (`RESULTADOS_PLANTILLA`). Este proyecto no envía WhatsApp.
 
 | Campo | Valor |
 | --- | --- |
-| Nombre | `montalvo_resultado_disponible` |
-| Categoría | Utilidad |
-| Idioma | Español (`es`) |
-| Encabezado | ninguno |
-| Pie | `No compartas tu código con nadie.` |
-| Botón | Visitar sitio web · URL dinámica |
-| Texto del botón | `Ver mi informe` |
-| URL | `https://resultados.107.175.132.15.nip.io/resultados/{{1}}` |
-| Ejemplo de `{{1}}` | `3d300296-db32-4238-85e4-58d02aeb534a` |
+| Categoría / idioma | Utilidad / `es` |
+| Botón | Visitar sitio web · URL dinámica · `Ver mi informe` |
+| URL | `https://resultados.107.175.132.15.nip.io/resultados/{{1}}` (`{{1}}` = ID de acceso) |
 
-Cuerpo, **sin ninguna variable**:
+**Pendiente en cuanto Meta la apruebe: editar su texto.** Se envió con el cuerpo de la versión con código («…ingresa el código de 12 caracteres que te entregamos en la clínica», pie «No compartas tu código con nadie.»), y desde el 2026-09-23 el paciente abre el informe sin código. Meta no permite editar una plantilla en revisión; al aprobarse se edita la misma —conserva nombre y botón, vuelve a una revisión corta y la versión aprobada sigue enviándose mientras tanto— con:
 
 > Clínica Montalvo: tu informe médico ya está disponible.
 >
-> Ábrelo con el botón de abajo e ingresa el código de 12 caracteres que te entregamos en la clínica.
+> Toca el botón de abajo para verlo y descargarlo.
 >
-> Si no tienes el código o necesitas ayuda, responde a este mensaje.
+> Si necesitas ayuda, responde a este mensaje.
 
-**El cuerpo no puede llevar variables.** El CRM (`ResultadosService.enviar`) manda un único componente —el botón URL en índice 0, con el ID de acceso— y ningún parámetro de cuerpo. Si la plantilla aprobada tuviera un `{{1}}` en el texto, cada envío fallaría por número de parámetros.
+Pie: `El enlace es personal. No lo reenvíes.` Mientras no se edite, el mensaje pide un código que la página ya no pide: el paciente toca el botón y ve su informe igual.
 
-La parte dinámica es el **ID de acceso**, nunca el código: el enlace identifica, el código autoriza. No agregar diagnóstico, tipo de estudio, CI, PAC, PDF ni el código al mensaje; el paciente puede leerlo en un teléfono compartido.
+**El cuerpo no lleva variables**: el CRM (`ResultadosService`) manda un único componente, el botón URL con el ID de acceso. No agregar diagnóstico, tipo de estudio, CI, PAC ni el PDF al mensaje: puede leerse en un teléfono compartido. Cerrar con «responde a este mensaje» abre la ventana de 24 horas para resolver dudas por el mismo hilo, y es el patrón con el que se aprobaron las plantillas de citas de esta clínica.
 
-Cerrar con «responde a este mensaje» no es adorno: es el patrón con el que las tres plantillas de citas de esta clínica fueron aprobadas el 2026-09-22, y además abre la ventana de 24 horas para que recepción resuelva por el mismo hilo a quien perdió el código.
-
-**Riesgo conocido**: el botón apunta a un dominio comodín sobre IP (`nip.io`). Es el elemento con más probabilidad de rechazo y el que peor lee un paciente. Al adoptar un subdominio propio habrá que **editar la plantilla**, lo que la devuelve a revisión y reinicia su calificación de calidad: conviene tener el dominio definitivo antes de enviarla a aprobar. Si la rechazan, la variante sin botón —mismo cuerpo, sin enlace, resolviendo por respuesta dentro de la ventana de 24 h— tiene el precedente de las tres ya aprobadas.
-
-### Variante B — sin botón, si Meta rechaza el enlace
-
-Mismo nombre base con sufijo `_sin_enlace`, misma categoría e idioma, **sin botón y sin variables**:
-
-> Clínica Montalvo: tu informe médico ya está disponible.
->
-> Responde a este mensaje y te enviamos el enlace para consultarlo. Necesitarás el código de 12 caracteres que te entregamos en la clínica.
-
-Pie igual: `No compartas tu código con nadie.`
-
-Usarla exige cambiar el envío del CRM para que no mande el componente de botón. **El coste es que deja de ser automática**: el paciente responde, su mensaje entra por el webhook del CRM y recepción le pasa el enlace dentro de la ventana de 24 horas.
-
-No existe una pantalla donde el paciente entre solo con su código: el enlace identifica el acceso y el código lo autoriza. Convertir el código en credencial global cambiaría ese modelo y permitiría enumerar accesos; no hacerlo sin decidirlo explícitamente.
+**Riesgo conocido**: el botón apunta a un dominio sobre IP (`nip.io`). Al adoptar un subdominio propio habrá que editar la plantilla, lo que la devuelve a revisión.
 
 La [política de WhatsApp](https://business.whatsapp.com/policy) exige los permisos aplicables para contactar y plantillas aprobadas para iniciar conversaciones conforme a sus reglas; no hace falta obligar al paciente a escribir primero cuando se cumple ese flujo. La [tarificación oficial](https://business.whatsapp.com/products/platform-pricing) depende de categoría y mercado: no se fija un precio inventado en bolivianos.
 
@@ -82,16 +58,16 @@ La app de Meta en modo desarrollo no bloquea este envío: la línea es un númer
 | Meta rechaza el aviso (plantilla sin aprobar, número sin WhatsApp) | El CRM lo muestra como «No se entregó» y permite reenviar: consta que no salió nada |
 | Envío sin confirmar (red caída con el POST en viaje) | «Sin confirmar»: el CRM no permite reenviar hasta que Meta resuelva el estado, para no mandar dos |
 | Paciente sin ficha en el CRM, o con su CI en dos fichas | El CRM lo señala y no envía; corregir la ficha o registrar el PAC |
-| Acceso vencido antes del aviso | El CRM no envía; el médico renueva y entrega el código nuevo |
+| Enlace vencido | En el CRM, «Renovar y enviar»: 30 días más, mismo enlace, aviso nuevo. El mensaje anterior vuelve a abrir |
 | R2 / antivirus caído | Rechazar carga/descarga con error; no publicar archivo sin verificación |
 | PDF equivocado | Retirar, explicar al paciente y crear nuevo informe corregido; conservar auditoría |
-| Código perdido | Médico renueva, entrega código nuevo; se revocan sesiones anteriores |
+| El paciente no encuentra el mensaje | Recepción usa «Renovar y enviar» si venció; si no, le reenvía el enlace desde el historial del chat |
 
 ## Observabilidad y mantenimiento
 
 Supervisar API, base, scanner, estado de bucket y worker; `/health/ready` solo verifica base, no todas esas dependencias. Los avisos y su estado se observan en el CRM. La auditoría clínica está en PostgreSQL; no convertir cuerpos de solicitudes en logs.
 
-Rotar secretos en el gestor del despliegue. Cambiar `SESSION_HMAC_KEY` invalida sesiones y códigos existentes: planificar renovación/entrega de accesos; no tratarla como una rotación transparente. No hay recuperación de contraseña por correo ni MFA en esta base; antes de ampliar acceso externo de administradores, definir el proceso operativo de cuentas.
+Rotar secretos en el gestor del despliegue. Cambiar `SESSION_HMAC_KEY` invalida las sesiones abiertas (los enlaces siguen valiendo). No hay recuperación de contraseña por correo ni MFA en esta base; antes de ampliar acceso externo de administradores, definir el proceso operativo de cuentas.
 
 El código no elimina PDFs históricos automáticamente. Un archivo puede quedar huérfano si el proceso cae entre almacenamiento y transacción: conciliar claves referenciadas antes de cualquier limpieza, con período de gracia y revisión. Ensayar restauración de base + archivos, no solo generar backups.
 

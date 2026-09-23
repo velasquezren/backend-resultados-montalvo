@@ -44,10 +44,10 @@ API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` co
 
 1. Administrador crea cuentas `MEDICO`; cada médico consulta solamente sus informes. Administrador puede consultar todos.
 2. Médico busca un paciente por CI **o** PAC exacto; si no existe, registra nombre y al menos un identificador. Registrar el PAC cuando se conozca: es la clave con la que el CRM reconoce al paciente sin dudas. No se pide teléfono: el aviso sale del CRM al número de la conversación real.
-3. Crea el informe con estudio y fecha. La API entrega una vez el código de consulta y el enlace. Entregar el código al paciente en la clínica: nunca viaja por WhatsApp.
+3. Crea el informe con estudio y fecha. La API genera el enlace del paciente; no hay código que entregar.
 4. Adjunta un PDF válido de hasta 10 MB y 300 páginas. Puede sustituirlo mientras sea borrador, usando la revisión actual.
 5. Revisa identidad y PDF y publica. Publicar pone el informe en la cola de recepción del CRM; no envía nada por sí mismo.
-6. El paciente usa enlace + código; su sesión dura 15 minutos y solo permite consultar ese informe. El acceso vence a los 30 días; el médico puede renovarlo.
+6. El paciente toca el botón del WhatsApp y ve su informe, sin escribir nada: **el enlace es la llave** (decidido con la clínica el 2026-09-23; el código de 12 caracteres en papel era el paso que más lo frenaba). Su sesión dura 15 minutos y solo permite consultar ese informe. El enlace vence a los 30 días; el médico o recepción (desde el CRM) lo extienden sin cambiarlo.
 7. Si hubo un error, retirar revoca acceso y sesiones y saca el informe de la cola del CRM. Para corregir un informe publicado, retirar y crear otro: no se modifica silenciosamente un resultado ya entregado.
 
 La confirmación humana comprueba que el PDF pertenece al paciente: la API valida el archivo, pero no interpreta su contenido médico ni verifica una identidad civil.

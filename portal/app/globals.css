@@ -360,13 +360,6 @@ input[type="file"]::file-selector-button {
   margin-top: 32px;
   border: 1px solid var(--line);
 }
-.access-code {
-  display: block;
-  font-size: 24px;
-  letter-spacing: 0.16em;
-  font-variant-numeric: tabular-nums;
-  margin: 20px 0;
-}
 .break {
   overflow-wrap: anywhere;
   font-size: 13px;
@@ -507,9 +500,6 @@ dialog p {
   footer {
     margin-top: 40px;
   }
-  .access-code {
-    font-size: 21px;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -517,37 +507,6 @@ dialog p {
     scroll-behavior: auto !important;
   }
 }
-@media print {
-  .brand,
-  .toolbar,
-  footer,
-  .editor > *:not(.access-card),
-  .skip {
-    display: none !important;
-  }
-  .access-card {
-    display: block !important;
-    border: 1px solid #555;
-    background: white;
-    color: black;
-  }
-  .access-card button {
-    display: none;
-  }
-  .access-card:before {
-    content: "Clínica Montalvo · Acceso a resultados";
-    display: block;
-    font-weight: bold;
-    margin-bottom: 16px;
-  }
-  .workspace,
-  .editor {
-    margin: 0;
-    padding: 0;
-    max-width: none;
-  }
-}
-
 .toolbar{flex-wrap:wrap}.toolbar>span{margin-right:auto}
 
 /* --- Buscador de la lista --- */
@@ -615,4 +574,15 @@ dialog p {
   .pdf-preview {
     height: 60vh;
   }
+}
+
+/* El botón que abre el informe es lo único que el paciente vino a hacer:
+   ancho completo y alto cómodo para el pulgar. */
+.patient-open {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 16px 20px;
+  font-size: 17px;
+  margin-top: 24px;
 }

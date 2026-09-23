@@ -18,7 +18,3 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   if (!salt || !expected) return false;
   return equalSecret((await derive(password, salt)).toString('hex'), expected);
 }
-export function accessCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return [...randomBytes(12)].map(n => alphabet[n % alphabet.length]).join('');
-}
