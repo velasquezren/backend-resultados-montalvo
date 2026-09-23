@@ -579,10 +579,162 @@ dialog p {
 /* El botón que abre el informe es lo único que el paciente vino a hacer:
    ancho completo y alto cómodo para el pulgar. */
 .patient-open {
-  display: block;
+  display: flex;
   width: 100%;
   text-align: center;
-  padding: 16px 20px;
+  padding: 17px 20px;
   font-size: 17px;
-  margin-top: 24px;
+  margin-top: 28px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 97, 86, 0.25);
+}
+
+/* ── Pantalla del paciente ─────────────────────────────────────────────
+   Una tarjeta que dice «está listo» antes que nada, el botón, y el paso
+   siguiente. Todo entra en la primera pantalla de un teléfono. */
+.patient {
+  margin-top: 40px;
+}
+.resultado {
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--background);
+  box-shadow: 0 10px 30px rgba(0, 69, 61, 0.08);
+  animation: resultado-entra 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.resultado h1 {
+  font-size: clamp(26px, 6vw, 34px);
+  margin: 14px 0 6px;
+}
+.resultado-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: var(--wash);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+.resultado-check {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--primary);
+  color: white;
+}
+.resultado-check svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 3;
+}
+.resultado-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.resultado-nota {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.siguiente-paso {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--wash);
+  transition: border-color 0.15s, transform 0.15s;
+  animation: resultado-entra 0.35s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.siguiente-paso:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.siguiente-paso strong {
+  display: block;
+  font-size: 15px;
+}
+.siguiente-paso small {
+  color: var(--muted);
+}
+.siguiente-icono {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: white;
+  color: var(--primary);
+}
+.siguiente-flecha {
+  margin-left: auto;
+  font-size: 26px;
+  color: var(--accent);
+}
+.privado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 4px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.privado svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+.ayuda-pie {
+  margin-top: 28px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ayuda-pie a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Mientras abre: la silueta de la tarjeta, no un texto que cambia. */
+.resultado-cargando {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.esqueleto {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--wash) 25%, #e8f2f0 50%, var(--wash) 75%);
+  background-size: 200% 100%;
+  animation: esqueleto-brillo 1.2s linear infinite;
+}
+.esqueleto-chip { width: 170px; height: 38px; border-radius: 999px; }
+.esqueleto-titulo { width: 80%; height: 34px; }
+.esqueleto-linea { width: 55%; height: 18px; }
+.esqueleto-boton { width: 100%; height: 58px; margin-top: 14px; border-radius: 12px; }
+
+@keyframes resultado-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes esqueleto-brillo {
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .resultado, .siguiente-paso, .esqueleto { animation: none; }
 }

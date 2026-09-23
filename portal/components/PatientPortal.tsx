@@ -15,8 +15,24 @@ type Estado =
   | { tipo: "enlace-inactivo"; mensaje: string }
   | { tipo: "error"; mensaje: string };
 
-const AYUDA =
-  "https://wa.me/59175031306?text=Necesito%20ayuda%20para%20ver%20mi%20resultado";
+/** La línea de Recepción: la misma desde la que llega el aviso, así la
+    respuesta del paciente cae en ese mismo chat del CRM. */
+const WHATSAPP_CLINICA = "59175031306";
+const whatsapp = (texto: string) =>
+  `https://wa.me/${WHATSAPP_CLINICA}?text=${encodeURIComponent(texto)}`;
+const AYUDA = whatsapp("Hola, necesito ayuda para ver mi resultado.");
+
+/* Íconos de trazo, del tamaño del texto; sin librería para cuatro dibujos. */
+const Icono = ({ d }: { d: string }) => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+  </svg>
+);
+const CHECK = "M20 6 9 17l-5-5";
+const DOCUMENTO = "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5";
+const CANDADO = "M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4";
+const CALENDARIO = "M7 3v3M17 3v3M4 8h16M5 5h14v16H5z";
 
 /**
  * Consulta del paciente. El enlace del WhatsApp es la llave: la página se abre
@@ -56,48 +72,67 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
 
   return (
     <section className="login patient">
-      <p className="eyebrow">Clínica Montalvo</p>
       {estado.tipo === "abriendo" && (
-        <>
-          <h1>Abriendo tu resultado…</h1>
-          <p className="lead" role="status">
-            Un momento, por favor.
-          </p>
-        </>
+        <div className="resultado resultado-cargando" role="status" aria-label="Abriendo tu resultado">
+          <span className="esqueleto esqueleto-chip" />
+          <span className="esqueleto esqueleto-titulo" />
+          <span className="esqueleto esqueleto-linea" />
+          <span className="esqueleto esqueleto-boton" />
+        </div>
       )}
       {estado.tipo === "listo" && (
         <>
-          <h1>Tu resultado</h1>
-          <section className="identity">
-            <strong>{estado.result.estudio}</strong>
-            <span>{dateLabel(estado.result.fechaEstudio)}</span>
-            <span>{estado.result.medico}</span>
-          </section>
-          {estado.result.disponible ? (
-            <a
-              className="button primary patient-open"
-              href="/api/v1/portal/informe/pdf"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Ver mi informe
-            </a>
-          ) : (
-            <p role="status">{estado.result.mensaje}</p>
-          )}
+          <article className="resultado">
+            <p className="resultado-estado">
+              <span className="resultado-check"><Icono d={CHECK} /></span>
+              {estado.result.disponible ? "Tu informe está listo" : "Tu informe"}
+            </p>
+            <h1>{estado.result.estudio}</h1>
+            <p className="resultado-meta">
+              {dateLabel(estado.result.fechaEstudio)}
+              {estado.result.medico && <> · {estado.result.medico}</>}
+            </p>
+            {estado.result.disponible ? (
+              <>
+                <a className="button primary patient-open" href="/api/v1/portal/informe/pdf"
+                  target="_blank" rel="noreferrer">
+                  <Icono d={DOCUMENTO} /> Ver mi informe
+                </a>
+                <p className="resultado-nota">
+                  Se abre en el visor de tu teléfono. Desde ahí puedes guardarlo o
+                  compartirlo con tu médico.
+                </p>
+              </>
+            ) : (
+              <p role="status" className="notice">{estado.result.mensaje}</p>
+            )}
+          </article>
+
+          {/* El siguiente paso natural después de recibir un resultado. */}
+          <a className="siguiente-paso" rel="noreferrer" target="_blank"
+            href={whatsapp(`Hola, recibí mi resultado de ${estado.result.estudio} y quiero agendar una consulta para revisarlo.`)}>
+            <span className="siguiente-icono"><Icono d={CALENDARIO} /></span>
+            <span>
+              <strong>¿Quieres revisarlo con tu médico?</strong>
+              <small>Agenda una consulta por WhatsApp</small>
+            </span>
+            <span className="siguiente-flecha" aria-hidden="true">›</span>
+          </a>
+
+          <p className="privado"><Icono d={CANDADO} /> Este enlace es personal. Por tu privacidad, no lo reenvíes.</p>
         </>
       )}
       {estado.tipo === "enlace-inactivo" && (
-        <>
+        <div className="resultado">
           <h1>Este enlace ya no está activo</h1>
           <p className="lead">{estado.mensaje}</p>
-          <a className="button primary" href={AYUDA} rel="noreferrer" target="_blank">
+          <a className="button primary" href={whatsapp("Hola, mi enlace de resultados venció. ¿Me pueden enviar uno nuevo?")} rel="noreferrer" target="_blank">
             Pedir un enlace nuevo
           </a>
-        </>
+        </div>
       )}
       {estado.tipo === "error" && (
-        <>
+        <div className="resultado">
           <h1>No pudimos abrir tu resultado</h1>
           <div role="alert">
             <p className="error">{estado.mensaje}</p>
@@ -105,15 +140,12 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
           <button className="primary" onClick={() => void abrir()}>
             Intentar de nuevo
           </button>
-        </>
+        </div>
       )}
-      <aside className="help">
-        <h2>¿Necesitas ayuda?</h2>
-        <p>Escríbenos por WhatsApp y te ayudamos a ver tu resultado.</p>
-        <a href={AYUDA} rel="noreferrer" target="_blank">
-          Contactar con atención al paciente
-        </a>
-      </aside>
+      <p className="ayuda-pie">
+        ¿Problemas para verlo?{" "}
+        <a href={AYUDA} rel="noreferrer" target="_blank">Escríbenos por WhatsApp</a>
+      </p>
     </section>
   );
 }
