@@ -17,7 +17,7 @@ La memoria de ClamAV y el análisis PDF requieren dimensionamiento. Recomendaci�
 
 ## Plantilla de aviso (la envía el CRM)
 
-**Creada en Meta el 2026-09-22** en la WABA de la línea *Recepción Clínica Montalvo*, id `2137598870221549`, nombre `montalvo_resultado_disponible`, en revisión. La usa el CRM (`RESULTADOS_PLANTILLA`). Este proyecto no envía WhatsApp.
+`montalvo_informe_disponible`, en la WABA de la línea *Recepción Clínica Montalvo*, **aprobada y en uso desde el 2026-09-24**. La usa el CRM (`RESULTADOS_PLANTILLA`). Este proyecto no envía WhatsApp.
 
 | Campo | Valor |
 | --- | --- |
@@ -25,15 +25,11 @@ La memoria de ClamAV y el análisis PDF requieren dimensionamiento. Recomendaci�
 | Botón | Visitar sitio web · URL dinámica · `Ver mi informe` |
 | URL | `https://resultados.107.175.132.15.nip.io/resultados/{{1}}` (`{{1}}` = ID de acceso) |
 
-**Pendiente en cuanto Meta la apruebe: editar su texto.** Se envió con el cuerpo de la versión con código («…ingresa el código de 12 caracteres que te entregamos en la clínica», pie «No compartas tu código con nadie.»), y desde el 2026-09-23 el paciente abre el informe sin código. Meta no permite editar una plantilla en revisión; al aprobarse se edita la misma —conserva nombre y botón, vuelve a una revisión corta y la versión aprobada sigue enviándose mientras tanto— con:
-
 > Clínica Montalvo: tu informe médico ya está disponible.
 >
 > Toca el botón de abajo para verlo y descargarlo.
 >
 > Si necesitas ayuda, responde a este mensaje.
-
-Pie: `El enlace es personal. No lo reenvíes.` Mientras no se edite, el mensaje pide un código que la página ya no pide: el paciente toca el botón y ve su informe igual.
 
 **El cuerpo no lleva variables**: el CRM (`ResultadosService`) manda un único componente, el botón URL con el ID de acceso. No agregar diagnóstico, tipo de estudio, CI, PAC ni el PDF al mensaje: puede leerse en un teléfono compartido. Cerrar con «responde a este mensaje» abre la ventana de 24 horas para resolver dudas por el mismo hilo, y es el patrón con el que se aprobaron las plantillas de citas de esta clínica.
 

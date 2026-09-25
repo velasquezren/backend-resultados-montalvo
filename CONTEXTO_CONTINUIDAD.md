@@ -7,8 +7,7 @@
 >   `releases/20260923-1911-pagina-paciente`.
 > - **El enlace es la llave**: el paciente abre su informe desde el botón del
 >   WhatsApp, sin código. El aviso lo manda el CRM con la plantilla aprobada
->   `montalvo_resultado_disponible` (su texto aún menciona un código que ya no
->   se pide). `montalvo_informe_disponible` está en revisión en Meta.
+>   `montalvo_informe_disponible` (desde el 24-09; sin código ni imagen).
 > - **Página del paciente rediseñada** al estilo del CRM, con su propio marco
 >   (`portal/app/resultados/layout.tsx`, Poppins, tokens en `.pac`). El portal
 >   de médicos está en `portal/app/(medico)/`; las URL no cambiaron.
@@ -33,7 +32,7 @@
 > `Paciente.telefono`) **se retiró**: nunca se encendió y el emisor es el CRM.
 > El worker solo hace la limpieza horaria. El CRM lee la cola publicada y
 > vincula por PAC o, si no hay, por CI único. La plantilla
-> `montalvo_resultado_disponible` se creó en Meta ese día y está en revisión.
+> de aviso vigente es `montalvo_informe_disponible`.
 > Donde lo de abajo diga otra cosa, manda [docs/operacion.md](docs/operacion.md)
 > y [docs/arquitectura.md](docs/arquitectura.md).
 
@@ -132,7 +131,7 @@ Otros límites actuales: sin edición de datos de paciente desde el portal, sin 
 
 Estado real: **desactivado y sin worker productivo instalado**. El código del worker existe (`npm run worker`), pero no basta para afirmar que los pacientes reciben mensajes.
 
-La plantilla propuesta es `resultado_disponible_montalvo`, idioma `es`, categoría solicitada de utilidad; **no se ha obtenido su aprobación desde este proyecto**. El transporte espera un botón URL dinámico de índice 0 con el identificador de acceso; no parámetros de cuerpo. No incluir PDF, diagnóstico, CI, PAC ni código secreto en el aviso.
+La plantilla vigente es `montalvo_informe_disponible` (idioma `es`, utilidad), y la envía el CRM. El transporte espera un botón URL dinámico de índice 0 con el identificador de acceso; no parámetros de cuerpo. No incluir PDF, diagnóstico, CI, PAC ni código secreto en el aviso.
 
 Antes de activar: elegir la línea emisora, comprobar requisitos actuales de Meta, aprobación y contrato exacto de plantilla, configurar secretos, consentimiento y costos, probar con autorización y después habilitar el worker y `NOTIFICATIONS_ENABLED`. Tener tarjeta no acredita que todo esto esté listo.
 

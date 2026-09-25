@@ -54,7 +54,7 @@ La confirmación humana comprueba que el PDF pertenece al paciente: la API valid
 
 ## Entrega al paciente
 
-El CRM es el **único emisor** de WhatsApp (decidido el 2026-09-22): una sola app de Meta, un solo webhook, y el mensaje queda en la conversación del paciente, así que si responde lo ve quien atiende. Recepción ve en el CRM la cola de informes publicados (`GET /v1/integraciones/crm/informes`) y envía la plantilla `montalvo_resultado_disponible` con un botón al enlace del informe. El mensaje lleva el enlace, nunca el código, el PDF, el diagnóstico ni el CI.
+El CRM es el **único emisor** de WhatsApp (decidido el 2026-09-22): una sola app de Meta, un solo webhook, y el mensaje queda en la conversación del paciente, así que si responde lo ve quien atiende. Recepción ve en el CRM la cola de informes publicados (`GET /v1/integraciones/crm/informes`) y envía la plantilla `montalvo_informe_disponible` con un botón al enlace del informe. El mensaje lleva el enlace, nunca el código, el PDF, el diagnóstico ni el CI.
 
 Hasta esa fecha este proyecto tenía su propio camino de avisos (transporte Meta, webhook, consentimiento al publicar, cola con reintentos). Nunca se encendió —cero avisos en producción— y se retiró entero: dos emisores para el mismo paciente habrían sido dos historiales y dos webhooks peleando por una sola URL. Especificación de la plantilla en [operación](docs/operacion.md).
 
