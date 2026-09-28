@@ -85,9 +85,7 @@ export class Results {
     return report;
   }
   async create(dto: CrearInformeDto, actor: Actor) {
-    const fecha = new Date(`${dto.fechaEstudio}T00:00:00.000Z`);
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-    if (!Number.isFinite(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== dto.fechaEstudio || dto.fechaEstudio > today || dto.fechaEstudio < '1900-01-01') problem(400, 'FECHA_INVALIDA', 'Indica la fecha real del estudio, sin usar una fecha futura.');
+    const fecha = fechaDeEstudio(dto.fechaEstudio);
     const result = await this.db.$transaction(async tx => {
       if (!await tx.paciente.findUnique({ where: { id: dto.pacienteId } })) problem(404, 'PACIENTE_NO_ENCONTRADO', 'Selecciona un paciente registrado.');
       const report = await tx.informe.create({ data: { ...dto, estudio: dto.estudio.trim(), fechaEstudio: fecha, medicoId: actor.id } });
@@ -198,6 +196,20 @@ export class Results {
 }
 
 /** El acceso del paciente dura 30 días desde que se crea o se renueva. */
-function vencimiento(): Date {
+/**
+ * Fecha clínica del estudio, validada contra el calendario de Bolivia.
+ *
+ * Se exporta porque la entrada de FileMaker crea informes por otra puerta: dos
+ * copias de esta regla divergirían y un informe con fecha futura acabaría
+ * entrando por la puerta que nadie corrigió.
+ */
+export function fechaDeEstudio(valor: string): Date {
+  const fecha = new Date(`${valor}T00:00:00.000Z`);
+  const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  if (!Number.isFinite(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== valor || valor > hoy || valor < '1900-01-01') problem(400, 'FECHA_INVALIDA', 'Indica la fecha real del estudio, sin usar una fecha futura.');
+  return fecha;
+}
+
+export function vencimiento(): Date {
   return new Date(Date.now() + 30 * 86400_000);
 }

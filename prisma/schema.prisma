@@ -62,6 +62,13 @@ model Informe {
   fechaEstudio DateTime @db.Date
   estado EstadoInforme @default(BORRADOR)
   revision Int @default(1)
+  /// Id del registro en FileMaker que originó este informe, si entró por ahí.
+  ///
+  /// Único: es lo que impide que pulsar el botón dos veces cree dos informes
+  /// del mismo estudio. Una comprobación previa la gana una carrera; el índice
+  /// no. En Postgres los NULL no chocan, así que los informes creados desde el
+  /// portal conviven sin problema.
+  referenciaExterna String? @unique @db.VarChar(80)
   archivoId String? @unique @db.Uuid
   archivo Archivo? @relation("ArchivoActual", fields: [archivoId], references: [id])
   archivos Archivo[] @relation("ArchivosInforme")

@@ -54,7 +54,7 @@ before(async () => {
   if (!url || new URL(url).pathname !== '/resultados_test' || !['127.0.0.1', 'localhost'].includes(new URL(url).hostname)) throw new Error('Usa una base local exclusiva resultados_test');
   Object.assign(process.env, { NODE_ENV: 'test', RESULTADOS_DATABASE_URL: url, SESSION_HMAC_KEY: 'ab'.repeat(32),
     CORS_ORIGINS: 'http://localhost:3000', PATIENT_PORTAL_URL: 'http://localhost:3000/resultados', STORAGE_DRIVER: 'local',
-    CRM_INTEGRATION_TOKEN: 'c'.repeat(40),
+    CRM_INTEGRATION_TOKEN: 'c'.repeat(40), FILEMAKER_API_TOKEN: 'f'.repeat(40),
     PRIVATE_STORAGE_DIR: await mkdtemp(join(tmpdir(), 'resultados-test-files-')),
   });
   delete process.env.CLAMAV_HOST;
@@ -334,4 +334,90 @@ test('la cola del CRM permite revalidar un solo informe antes de enviarlo', asyn
   await db.accesoPaciente.updateMany({ where: { informeId: uno.informe.id }, data: { revocadoEn: new Date() } });
   const tras = await api<{ datos: Fila[] }>(`/v1/integraciones/crm/informes?informeId=${uno.informe.id}`, 'GET', undefined, 'c'.repeat(40));
   assert.equal(tras.data.datos[0]!.accesoVigente, false);
+});
+
+/** Una llamada de FileMaker: todo junto en un multipart, como la manda el guion. */
+async function desdeFileMaker(campos: Record<string, string>, token = 'f'.repeat(40), archivo: Buffer | null = pdf) {
+  const form = new FormData();
+  for (const [clave, valor] of Object.entries(campos)) form.set(clave, valor);
+  if (archivo) form.set('archivo', new Blob([new Uint8Array(archivo)], { type: 'application/pdf' }), 'informe.pdf');
+  const response = await fetch(`${base}/v1/integraciones/filemaker/informe`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+  return { status: response.status, data: await response.json() as Record<string, never> & { informeId: string; estado: string; repetido: boolean; paciente: { id: string; nombre: string; pac: string | null }; archivo: { paginas: number } | null; acceso: { id: string; url: string } | null } };
+}
+
+const camposFileMaker = (extra: Record<string, string>) => ({
+  medico: 'medico@prueba.test', nombre: 'Paciente de FileMaker',
+  estudio: 'Ecografía abdominal', fechaEstudio: '2026-01-05', ...extra,
+});
+
+test('FileMaker: una sola llamada deja el informe en borrador con el PDF puesto', async () => {
+  const pac = `PAC-FM-${randomUUID().slice(0, 8)}`;
+  const r = await desdeFileMaker(camposFileMaker({ pac }));
+  assert.equal(r.status, 201);
+  assert.equal(r.data.estado, 'BORRADOR', 'no debe publicarse solo: publicar exige que una persona confirme');
+  assert.equal(r.data.repetido, false);
+  assert.equal(r.data.paciente.pac, pac.toUpperCase());
+  assert.equal(r.data.archivo?.paginas, 1);
+  // El enlace apunta al ACCESO del paciente, no al informe.
+  assert.ok(r.data.acceso && r.data.acceso.url.endsWith(r.data.acceso.id));
+
+  // Queda a nombre del médico que lo firmó: es quien lo verá en su portal.
+  const guardado = await db.informe.findUniqueOrThrow({ where: { id: r.data.informeId }, select: { medicoId: true, archivoId: true, referenciaExterna: true, medico: { select: { email: true } } } });
+  assert.equal(guardado.medico.email, 'medico@prueba.test');
+  assert.ok(guardado.archivoId, 'el PDF tiene que quedar adjunto en la misma llamada');
+  assert.equal(guardado.referenciaExterna, null, 'sin referencia, no se inventa una');
+});
+
+test('FileMaker: la credencial es obligatoria', async () => {
+  assert.equal((await desdeFileMaker(camposFileMaker({ pac: `PAC-X-${randomUUID().slice(0, 8)}` }), 'token-corto')).status, 401);
+  assert.equal((await desdeFileMaker(camposFileMaker({ pac: `PAC-Y-${randomUUID().slice(0, 8)}` }), '')).status, 401);
+});
+
+test('FileMaker: el paciente que ya existe se reutiliza, no se duplica', async () => {
+  const pac = `PAC-DUP-${randomUUID().slice(0, 8)}`;
+  const primero = await desdeFileMaker(camposFileMaker({ pac }));
+  assert.equal(primero.status, 201);
+  const segundo = await desdeFileMaker(camposFileMaker({ pac, estudio: 'Ecografía renal' }));
+  assert.equal(segundo.status, 201);
+  assert.equal(segundo.data.paciente.id, primero.data.paciente.id);
+  assert.notEqual(segundo.data.informeId, primero.data.informeId);
+  assert.equal(await db.paciente.count({ where: { pac: pac.toUpperCase() } }), 1);
+});
+
+/* El botón pulsado dos veces no puede dejar dos informes del mismo estudio. */
+test('FileMaker: la misma referencia devuelve el informe anterior', async () => {
+  const referencia = `FM-${randomUUID().slice(0, 10)}`;
+  const campos = camposFileMaker({ pac: `PAC-REF-${randomUUID().slice(0, 8)}`, referencia });
+  const primero = await desdeFileMaker(campos);
+  assert.equal(primero.status, 201);
+  assert.equal(primero.data.repetido, false);
+
+  const repetido = await desdeFileMaker(campos);
+  assert.equal(repetido.status, 201);
+  assert.equal(repetido.data.repetido, true, 'debe avisar de que no creó nada');
+  assert.equal(repetido.data.informeId, primero.data.informeId);
+  assert.equal(await db.informe.count({ where: { referenciaExterna: referencia } }), 1);
+
+  // Dos botones a la vez tampoco: lo impide el índice único, no una comprobación.
+  const aLaVez = await Promise.all([desdeFileMaker(campos), desdeFileMaker(campos)]);
+  for (const r of aLaVez) assert.equal(r.data.informeId, primero.data.informeId);
+  assert.equal(await db.informe.count({ where: { referenciaExterna: referencia } }), 1);
+});
+
+test('FileMaker: un PDF rechazado no deja borradores huérfanos', async () => {
+  const pac = `PAC-MAL-${randomUUID().slice(0, 8)}`;
+  const antes = await db.informe.count();
+  const r = await desdeFileMaker(camposFileMaker({ pac }), 'f'.repeat(40), Buffer.from('esto no es un PDF'));
+  assert.equal(r.status, 400);
+  assert.equal(await db.informe.count(), antes, 'no puede quedar un informe sin PDF');
+  assert.equal(await db.paciente.count({ where: { pac: pac.toUpperCase() } }), 0, 'ni un paciente a medias');
+});
+
+test('FileMaker: exige médico activo, identificador y fecha real', async () => {
+  const pac = () => `PAC-V-${randomUUID().slice(0, 8)}`;
+  assert.equal((await desdeFileMaker(camposFileMaker({ pac: pac(), medico: 'nadie@prueba.test' }))).status, 404);
+  const sinId = { ...camposFileMaker({}) } as Record<string, string>;
+  assert.equal((await desdeFileMaker(sinId)).status, 400);
+  // La MISMA regla de fecha que el portal: sin ella habría una puerta más laxa.
+  assert.equal((await desdeFileMaker(camposFileMaker({ pac: pac(), fechaEstudio: '2099-01-01' }))).status, 400);
 });

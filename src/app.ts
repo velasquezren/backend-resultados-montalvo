@@ -8,18 +8,19 @@ import { Database } from './database';
 import { Attempts, AuthGuard, AuthService } from './auth/auth';
 import { PrivateFiles, PdfScanner } from './files/files';
 import { Results } from './results/results';
+import { FileMakerIntake } from './results/filemaker';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
 import { Mantenimiento } from './mantenimiento/mantenimiento';
-import { AuthController, CrmIntegrationController, HealthController, PatientsController, PortalController, ResultsController } from './controllers';
+import { AuthController, CrmIntegrationController, FileMakerController, HealthController, PatientsController, PortalController, ResultsController } from './controllers';
 import { ApiErrors } from './errors';
 
 @Module({
-  controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, CrmIntegrationController],
+  controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, CrmIntegrationController, FileMakerController],
   providers: [
     { provide: CONFIG, useFactory: readConfig }, Database, Attempts, AuthService,
     { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner,
-    Patients, Results, PatientPortal, Mantenimiento,
+    Patients, Results, PatientPortal, Mantenimiento, FileMakerIntake,
   ],
 })
 export class AppModule {}
