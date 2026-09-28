@@ -60,8 +60,24 @@ FILEMAKER_API_TOKEN=<32+ caracteres>   # openssl rand -hex 32
 ```
 
 Sin esa variable el endpoint responde 401 a todo, que es el comportamiento
-seguro por defecto. Apache tiene que publicar la ruta: hoy solo expone el
-portal, y la API vive en loopback.
+seguro por defecto.
+
+**Apache tiene que publicar la ruta.** Hoy solo expone el portal Next; la API
+vive en loopback y el proxy `/api/*` del portal no admite esta ruta (su lista
+blanca es para el navegador, con cookie y `Origin`). Un guion no es un
+navegador, así que va directo:
+
+```apache
+# En el vhost de resultados.107.175.132.15.nip.io
+<Location /v1/integraciones/filemaker>
+    ProxyPass        http://127.0.0.1:3010/v1/integraciones/filemaker
+    ProxyPassReverse http://127.0.0.1:3010/v1/integraciones/filemaker
+</Location>
+```
+
+Solo esa ruta: el resto de la API sigue sin salir a internet. La credencial es
+lo único que la protege, así que si se filtra, se rota la variable y se
+reinicia `resultados-api`.
 
 ## El guion de FileMaker
 
@@ -74,7 +90,7 @@ Guardar registros como PDF [ Con diálogo: No ; "$ruta" ; Registro actual ]
 Insertar archivo [ g_pdf ; "$ruta" ]
 
 Insertar desde URL [ Con diálogo: No ; Destino: $r ;
-  "https://resultados.107.175.132.15.nip.io/api/v1/integraciones/filemaker/informe" ;
+  "https://resultados.107.175.132.15.nip.io/v1/integraciones/filemaker/informe" ;
   Opciones cURL:
     "-X POST"
   & " -H \"Authorization: Bearer " & $token & "\""
