@@ -57,9 +57,15 @@ export class FileMakerIntake {
           data: { pacienteId: paciente.id, medicoId: medico.id, estudio: dto.estudio.trim(), fechaEstudio: fecha, referenciaExterna: dto.referencia ?? null },
         });
         const archivo = await tx.archivo.create({ data: { informeId: creado.id, clave, bytes: buffer.length, ...validacion.value } });
-        await tx.informe.update({ where: { id: creado.id }, data: { archivoId: archivo.id, revision: { increment: 1 } } });
+        /* Publicar aquí y no llamando a `Results.publish` porque todo nace en
+           esta transacción: no hay un estado intermedio que otra petición
+           pudiera ver a medias, ni una `revision` que reconciliar. */
+        await tx.informe.update({
+          where: { id: creado.id },
+          data: { archivoId: archivo.id, revision: { increment: 1 }, ...(dto.publicar ? { estado: 'PUBLICADO' as const, publicadoEn: new Date() } : {}) },
+        });
         await tx.accesoPaciente.create({ data: { informeId: creado.id, expiraEn: vencimiento() } });
-        await tx.auditoria.create({ data: { actorId: medico.id, accion: 'INFORME_DESDE_FILEMAKER', informeId: creado.id } });
+        await tx.auditoria.create({ data: { actorId: medico.id, accion: dto.publicar ? 'INFORME_DESDE_FILEMAKER_PUBLICADO' : 'INFORME_DESDE_FILEMAKER', informeId: creado.id } });
         return tx.informe.findUniqueOrThrow({ where: { id: creado.id }, select: this.seleccion });
       });
       return this.respuesta(informe, false);

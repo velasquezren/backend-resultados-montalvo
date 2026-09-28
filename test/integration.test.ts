@@ -421,3 +421,28 @@ test('FileMaker: exige médico activo, identificador y fecha real', async () => 
   // La MISMA regla de fecha que el portal: sin ella habría una puerta más laxa.
   assert.equal((await desdeFileMaker(camposFileMaker({ pac: pac(), fechaEstudio: '2099-01-01' }))).status, 400);
 });
+
+/* El extremo del circuito: FileMaker publica y el aviso ya está en la cola del
+   CRM, que es de donde sale el WhatsApp al paciente. */
+test('FileMaker: con publicar=true el informe entra en la cola del CRM; sin él, no', async () => {
+  const pacPublicado = `PAC-PUB-${randomUUID().slice(0, 8)}`;
+  const publicado = await desdeFileMaker(camposFileMaker({ pac: pacPublicado, publicar: 'true' }));
+  assert.equal(publicado.status, 201);
+  assert.equal(publicado.data.estado, 'PUBLICADO');
+
+  const borrador = await desdeFileMaker(camposFileMaker({ pac: `PAC-BOR-${randomUUID().slice(0, 8)}` }));
+  assert.equal(borrador.data.estado, 'BORRADOR', 'sin la bandera no se publica solo');
+
+  type Fila = { informeId: string; accesoVigente: boolean; paciente: { pac: string | null } };
+  const cola = await api<{ datos: Fila[] }>('/v1/integraciones/crm/informes?limite=100', 'GET', undefined, 'c'.repeat(40));
+  assert.equal(cola.status, 200);
+  const enCola = cola.data.datos.find(f => f.informeId === publicado.data.informeId);
+  assert.ok(enCola, 'el publicado tiene que estar disponible para que el CRM avise');
+  assert.equal(enCola.accesoVigente, true);
+  assert.equal(enCola.paciente.pac, pacPublicado.toUpperCase(), 'el CRM cruza la ficha por este PAC');
+  assert.equal(cola.data.datos.some(f => f.informeId === borrador.data.informeId), false);
+
+  // Publicar no puede saltarse la validación del PDF.
+  const malo = await desdeFileMaker(camposFileMaker({ pac: `PAC-PM-${randomUUID().slice(0, 8)}`, publicar: 'true' }), 'f'.repeat(40), Buffer.from('no soy un pdf'));
+  assert.equal(malo.status, 400);
+});

@@ -1,5 +1,5 @@
 import { Type, Transform } from 'class-transformer';
-import { Equals, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min } from 'class-validator';
+import { Equals, IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min } from 'class-validator';
 import { EstadoInforme, Rol } from './generated/prisma/client';
 
 export class LoginDto {
@@ -50,6 +50,16 @@ export class FileMakerInformeDto {
    * el primero y no cobra ni duplica nada.
    */
   @IsOptional() @IsString() @Length(1, 80) @Matches(/^[A-Za-z0-9._:-]+$/) referencia?: string;
+  /**
+   * `true` publica el informe en la misma llamada, sin que nadie lo mire.
+   *
+   * El paciente queda alcanzable al instante y el aviso entra en la cola del
+   * CRM. Publicar no tiene vuelta atrás: corregir obliga a retirar y crear
+   * otro. Por omisión queda en borrador.
+   *
+   * Llega como texto del multipart, no como booleano de JSON.
+   */
+  @IsOptional() @Transform(({ value }: { value: unknown }) => value === true || value === 'true') @IsBoolean() publicar?: boolean;
 }
 export class RevisionDto {
   @Type(() => Number) @IsInt() @Min(1) revision!: number;
