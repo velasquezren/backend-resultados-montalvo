@@ -41,6 +41,9 @@ export class FileMakerGuard implements CanActivate {
  * queda vivo al instante—. El médico abre el portal, ve el informe ya montado
  * y publica de un clic.
  */
+/** `Informe.tipo` ya nace como ECOGRAFIA; el nombre visible sigue ese criterio. */
+const ESTUDIO_POR_DEFECTO = 'Ecografía';
+
 @Injectable()
 export class FileMakerIntake {
   constructor(
@@ -57,9 +60,13 @@ export class FileMakerIntake {
       if (previo) return this.respuesta(previo, true);
     }
 
-    /* 2. El informe es de un médico concreto: es quien lo verá en su portal. */
-    const medico = await this.db.usuario.findFirst({ where: { email: dto.medico.trim().toLowerCase(), activo: true }, select: { id: true } });
-    if (!medico) problem(404, 'MEDICO_NO_ENCONTRADO', 'Ese correo no corresponde a un médico activo del portal.');
+    /* 2. El informe es de un médico concreto: es quien lo verá en su portal.
+       FileMaker puede no tener ese dato a mano, así que se admite uno por
+       defecto del servidor — con el coste de que todos caigan en esa cuenta. */
+    const correo = (dto.medico ?? process.env.FILEMAKER_MEDICO_POR_DEFECTO ?? '').trim().toLowerCase();
+    if (!correo) problem(400, 'MEDICO_REQUERIDO', 'Manda el campo «medico», o configura FILEMAKER_MEDICO_POR_DEFECTO en el servidor.');
+    const medico = await this.db.usuario.findFirst({ where: { email: correo, activo: true }, select: { id: true } });
+    if (!medico) problem(404, 'MEDICO_NO_ENCONTRADO', `«${correo}» no es un médico activo del portal.`);
 
     const fecha = fechaDeEstudio(dto.fechaEstudio);
 
@@ -76,7 +83,7 @@ export class FileMakerIntake {
     try {
       const informe = await this.db.$transaction(async tx => {
         const creado = await tx.informe.create({
-          data: { pacienteId: paciente.id, medicoId: medico.id, estudio: dto.estudio.trim(), fechaEstudio: fecha, referenciaExterna: dto.referencia ?? null },
+          data: { pacienteId: paciente.id, medicoId: medico.id, estudio: dto.estudio?.trim() || ESTUDIO_POR_DEFECTO, fechaEstudio: fecha, referenciaExterna: dto.referencia ?? null },
         });
         const archivo = await tx.archivo.create({ data: { informeId: creado.id, clave, bytes: buffer.length, ...validacion.value } });
         /* Publicar aquí y no llamando a `Results.publish` porque todo nace en

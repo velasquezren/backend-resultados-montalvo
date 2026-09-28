@@ -31,10 +31,10 @@ Content-Type: multipart/form-data
 | Campo | Obligatorio | Nota |
 | --- | --- | --- |
 | `archivo` | sí | El PDF. Hasta 10 MB y 300 páginas; se valida y pasa por ClamAV |
-| `medico` | sí | Correo de un médico **activo**; es a quien se atribuye y quien lo ve |
+| `medico` | si no hay defecto | Correo de un médico **activo**. Si el servidor define `FILEMAKER_MEDICO_POR_DEFECTO`, puede omitirse |
 | `nombre` | sí | Nombre del paciente, por si hay que registrarlo |
 | `pac` / `ci` | al menos uno | Identificadores; se normalizan a mayúsculas |
-| `estudio` | sí | Ej. «Ecografía abdominal» |
+| `estudio` | no | Ej. «Ecografía abdominal». Sin él se usa «Ecografía» |
 | `fechaEstudio` | sí | `AAAA-MM-DD`, no futura (calendario de Bolivia) |
 | `referencia` | recomendado | Id del registro en FileMaker — ver abajo |
 | `publicar` | no | `true` publica en la misma llamada; por omisión, borrador |
@@ -64,8 +64,14 @@ quedan borradores ni pacientes a medias.
 ## Configuración
 
 ```
-FILEMAKER_API_TOKEN=<32+ caracteres>   # openssl rand -hex 32
+FILEMAKER_API_TOKEN=<32+ caracteres>          # openssl rand -hex 32
+FILEMAKER_MEDICO_POR_DEFECTO=doctor@ejemplo   # opcional
 ```
+
+**El médico por defecto tiene un coste**: todos los informes de FileMaker caen
+en esa cuenta, así que los demás médicos no ven los suyos en el portal y la
+auditoría dice siempre el mismo nombre. Si FileMaker tiene el correo del médico
+a mano, mándalo en el campo `medico` y no configures el defecto.
 
 Sin esa variable el endpoint responde 401 a todo, que es el comportamiento
 seguro por defecto.

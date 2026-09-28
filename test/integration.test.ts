@@ -454,3 +454,32 @@ test('FileMaker: con publicar=true el informe entra en la cola del CRM; sin él,
   const malo = await desdeFileMaker(camposFileMaker({ pac: `PAC-PM-${randomUUID().slice(0, 8)}`, publicar: 'true' }), 'f'.repeat(40), Buffer.from('no soy un pdf'));
   assert.equal(malo.status, 400);
 });
+
+/* Lo que manda el botón de FileMaker de verdad: solo nombre, pac, fecha y PDF. */
+test('FileMaker: sin medico ni estudio usa los valores por defecto del servidor', async () => {
+  const antes = process.env.FILEMAKER_MEDICO_POR_DEFECTO;
+  process.env.FILEMAKER_MEDICO_POR_DEFECTO = 'medico@prueba.test';
+  try {
+    const pac = `PAC-MIN-${randomUUID().slice(0, 8)}`;
+    const r = await desdeFileMaker({ nombre: 'Paciente mínimo', pac, fechaEstudio: '2026-01-07', publicar: 'true' });
+    assert.equal(r.status, 201);
+    assert.equal(r.data.estado, 'PUBLICADO');
+    const fila = await db.informe.findUniqueOrThrow({ where: { id: r.data.informeId }, select: { estudio: true, medico: { select: { email: true } } } });
+    assert.equal(fila.estudio, 'Ecografía');
+    assert.equal(fila.medico.email, 'medico@prueba.test');
+  } finally {
+    if (antes === undefined) delete process.env.FILEMAKER_MEDICO_POR_DEFECTO; else process.env.FILEMAKER_MEDICO_POR_DEFECTO = antes;
+  }
+});
+
+test('FileMaker: sin medico y sin valor por defecto lo dice claro', async () => {
+  const antes = process.env.FILEMAKER_MEDICO_POR_DEFECTO;
+  delete process.env.FILEMAKER_MEDICO_POR_DEFECTO;
+  try {
+    const r = await desdeFileMaker({ nombre: 'Sin médico', pac: `PAC-SM-${randomUUID().slice(0, 8)}`, fechaEstudio: '2026-01-07' });
+    assert.equal(r.status, 400);
+    assert.ok(JSON.stringify(r.data).includes('FILEMAKER_MEDICO_POR_DEFECTO'), 'el error dice cómo arreglarlo');
+  } finally {
+    if (antes !== undefined) process.env.FILEMAKER_MEDICO_POR_DEFECTO = antes;
+  }
+});

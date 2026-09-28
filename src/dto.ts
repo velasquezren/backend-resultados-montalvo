@@ -37,12 +37,19 @@ export class CrearInformeDto {
  * entrada alterna con validación más laxa es una puerta trasera.
  */
 export class FileMakerInformeDto {
-  /** Médico al que se atribuye el informe: es quien lo verá en su portal. */
-  @IsEmail() @MaxLength(254) medico!: string;
+  /**
+   * Médico al que se atribuye el informe: es quien lo verá en su portal.
+   *
+   * Opcional solo si el servidor define `FILEMAKER_MEDICO_POR_DEFECTO`. Con el
+   * valor por defecto TODOS los informes de FileMaker caen en una sola cuenta:
+   * los demás médicos no los ven y la auditoría dice siempre el mismo nombre.
+   */
+  @IsOptional() @IsEmail() @MaxLength(254) medico?: string;
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(2, 160) nombre!: string;
   @IsOptional() @IsString() @Length(3, 40) @Matches(/^[A-Z0-9 .-]+$/i) ci?: string;
   @IsOptional() @IsString() @Length(2, 40) @Matches(/^[A-Z0-9-]+$/i) pac?: string;
-  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(3, 160) estudio!: string;
+  /** Sin él se usa «Ecografía»: `Informe.tipo` ya nace como ECOGRAFIA. */
+  @IsOptional() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(3, 160) estudio?: string;
   @Matches(/^\d{4}-\d{2}-\d{2}$/) fechaEstudio!: string;
   /**
    * Identificador del registro en FileMaker. Sin él, pulsar el botón dos veces
