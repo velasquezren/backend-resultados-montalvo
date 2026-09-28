@@ -368,9 +368,17 @@ test('FileMaker: una sola llamada deja el informe en borrador con el PDF puesto'
   assert.equal(guardado.referenciaExterna, null, 'sin referencia, no se inventa una');
 });
 
-test('FileMaker: la credencial es obligatoria', async () => {
+test('FileMaker: la credencial se comprueba ANTES de mirar el cuerpo', async () => {
   assert.equal((await desdeFileMaker(camposFileMaker({ pac: `PAC-X-${randomUUID().slice(0, 8)}` }), 'token-corto')).status, 401);
   assert.equal((await desdeFileMaker(camposFileMaker({ pac: `PAC-Y-${randomUUID().slice(0, 8)}` }), '')).status, 401);
+
+  /* Con el cuerpo inválido TAMBIÉN tiene que ser 401, no 400. Con la
+     comprobación dentro del handler devolvía 400 enumerando los campos del
+     endpoint a quien no se había identificado, y encima ya había aceptado su
+     multipart. Los guards corren antes de leer el cuerpo. */
+  const basura = await desdeFileMaker({ medico: 'no-es-un-correo', nombre: 'x' }, 'token-corto', null);
+  assert.equal(basura.status, 401, 'la validación no puede hablar antes que la credencial');
+  assert.equal(JSON.stringify(basura.data).includes('must be'), false, 'no se filtra la forma del DTO');
 });
 
 test('FileMaker: el paciente que ya existe se reutiliza, no se duplica', async () => {

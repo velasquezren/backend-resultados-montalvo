@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth';
@@ -10,7 +10,7 @@ import { MAX_PDF_BYTES } from './files/files';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
 import { Results } from './results/results';
-import { FileMakerIntake } from './results/filemaker';
+import { FileMakerGuard, FileMakerIntake } from './results/filemaker';
 
 function fileResponse(response: Response, file: Buffer, disposition: 'inline' | 'attachment' = 'attachment'): void {
   response.setHeader('Content-Type', 'application/pdf');
@@ -119,20 +119,19 @@ export class CrmIntegrationController {
  * sigue viendo lo suyo y la auditoría dice quién fue.
  */
 @Public()
+/* ─── Este guard es lo único que hay que quitar para dejar la ruta abierta ───
+   Sin él, cualquiera que dé con la URL puede crear pacientes y subir PDFs a
+   fichas reales, y esos informes acaban en la cola desde la que se le manda el
+   enlace por WhatsApp a una paciente. Va como guard y no dentro del handler
+   porque los guards corren ANTES de leer el cuerpo. */
+@UseGuards(FileMakerGuard)
 @Controller('v1/integraciones/filemaker')
 export class FileMakerController {
   constructor(private readonly intake: FileMakerIntake, private readonly attempts: Attempts) {}
 
   @Post('informe')
   @UseInterceptors(FileInterceptor('archivo', { limits: { fileSize: MAX_PDF_BYTES, files: 1, fields: 10, parts: 11 } }))
-  async informe(@Body() dto: FileMakerInformeDto, @UploadedFile() file: Express.Multer.File | undefined, @Req() req: Request) {
-    /* ─── Esta es la única comprobación que hay que quitar para dejarlo abierto ───
-       Sin ella, cualquiera que dé con la URL puede crear pacientes y subir PDFs
-       a fichas reales, y esos informes acaban en la cola desde la que se le
-       manda el enlace por WhatsApp a una paciente. */
-    const esperado = process.env.FILEMAKER_API_TOKEN;
-    if (!esperado || esperado.length < 32 || !equalSecret(bearer(req), esperado)) problem(401, 'INTEGRACION_NO_AUTORIZADA', 'Integración no autorizada.');
-
+  async informe(@Body() dto: FileMakerInformeDto, @UploadedFile() file: Express.Multer.File | undefined) {
     await this.attempts.consume('filemaker', 'guion', 60, 60);
     if (!file || file.mimetype !== 'application/pdf') problem(400, 'PDF_REQUERIDO', 'Adjunta el informe como archivo PDF en el campo «archivo».');
     return this.intake.recibir(dto, file.buffer);

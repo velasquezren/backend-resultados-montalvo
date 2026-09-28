@@ -1,4 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import type { Request } from 'express';
+import { bearer } from '../auth/auth';
+import { equalSecret } from '../auth/crypto';
 import { randomUUID } from 'node:crypto';
 import { AppConfig, CONFIG } from '../config';
 import { Database, Prisma } from '../database';
@@ -7,6 +10,25 @@ import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { normalizeId } from './patients';
 import { fechaDeEstudio, vencimiento } from './results';
+
+/**
+ * La credencial, comprobada en un GUARD y no dentro del handler.
+ *
+ * En Nest los guards corren antes que los interceptores y los pipes. Con la
+ * comprobación dentro del handler, una llamada sin credencial recibía primero
+ * la validación del cuerpo —un 400 que enumera los campos del endpoint a quien
+ * no se ha identificado— y, peor, el servidor ya había aceptado y procesado su
+ * multipart de hasta 10 MB. Aquí se rechaza antes de leer nada.
+ */
+@Injectable()
+export class FileMakerGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const esperado = process.env.FILEMAKER_API_TOKEN;
+    const recibido = bearer(context.switchToHttp().getRequest<Request>());
+    if (!esperado || esperado.length < 32 || !equalSecret(recibido, esperado)) problem(401, 'INTEGRACION_NO_AUTORIZADA', 'Integración no autorizada.');
+    return true;
+  }
+}
 
 /**
  * Entrada desde FileMaker: una sola llamada deja el informe listo para que el
