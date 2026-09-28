@@ -483,3 +483,37 @@ test('FileMaker: sin medico y sin valor por defecto lo dice claro', async () => 
     if (antes !== undefined) process.env.FILEMAKER_MEDICO_POR_DEFECTO = antes;
   }
 });
+
+/* La asistente comprueba el PDF antes de enviarlo, y eso NO puede parecer que
+   lo vio la paciente: «abierto» es la señal con la que recepción decide a quién
+   seguir. */
+test('el PDF para el CRM no marca el informe como abierto por el paciente', async () => {
+  const informe = await ready();
+  assert.equal((await publish(informe.informe)).status, 200);
+  const antes = await db.accesoPaciente.findUniqueOrThrow({ where: { informeId: informe.informe.id }, select: { abiertoEn: true } });
+  assert.equal(antes.abiertoEn, null);
+
+  const url = `${base}/v1/integraciones/crm/informes/${informe.informe.id}/pdf`;
+  assert.equal((await fetch(url)).status, 401);
+
+  const pdfCrm = await fetch(url, { headers: { Authorization: `Bearer ${'c'.repeat(40)}` } });
+  assert.equal(pdfCrm.status, 200);
+  assert.equal(pdfCrm.headers.get('content-type'), 'application/pdf');
+  assert.ok((await pdfCrm.arrayBuffer()).byteLength > 0);
+
+  const despues = await db.accesoPaciente.findUniqueOrThrow({ where: { informeId: informe.informe.id }, select: { abiertoEn: true } });
+  assert.equal(despues.abiertoEn, null, 'revisar desde el CRM no es que lo abriera la paciente');
+
+  // Y cuando la paciente SÍ entra por su enlace, ahí sí queda marcado.
+  const sesion = await api<{ token: string }>(`/v1/portal/accesos/${informe.acceso.id}/ingresar`, 'POST', {});
+  assert.equal(sesion.status, 200);
+  assert.equal((await api('/v1/portal/informe', 'GET', undefined, sesion.data.token)).status, 200);
+  const trasPaciente = await db.accesoPaciente.findUniqueOrThrow({ where: { informeId: informe.informe.id }, select: { abiertoEn: true } });
+  assert.notEqual(trasPaciente.abiertoEn, null);
+});
+
+test('el PDF para el CRM solo existe si el informe está publicado', async () => {
+  const borrador = await ready();
+  const r = await fetch(`${base}/v1/integraciones/crm/informes/${borrador.informe.id}/pdf`, { headers: { Authorization: `Bearer ${'c'.repeat(40)}` } });
+  assert.equal(r.status, 404);
+});

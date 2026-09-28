@@ -101,6 +101,18 @@ export class CrmIntegrationController {
     await this.attempts.consume('crm-informes', 'consumer', 60, 60);
     return this.results.publishedForCrm(dto);
   }
+  /**
+   * El PDF, para que la asistente vea qué informe va a enviar.
+   *
+   * Va por aquí y no por el enlace del paciente porque ese enlace marca
+   * `abiertoEn`, y entonces «Abierto por el paciente» diría que lo vio ella.
+   */
+  @Get('informes/:id/pdf') async pdf(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request, @Res() res: Response) {
+    this.authorize(req);
+    await this.attempts.consume('crm-pdf', 'consumer', 120, 60);
+    fileResponse(res, await this.results.pdfParaCrm(id), 'inline');
+  }
+
   /** Recepción reenvía un aviso cuyo acceso venció: 30 días más, mismo enlace. */
   @Post('informes/:id/acceso/renovar') @HttpCode(200) async renew(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     this.authorize(req);

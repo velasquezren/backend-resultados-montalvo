@@ -74,6 +74,21 @@ export class Results {
       total, pagina: dto.pagina, limite: dto.limite, totalPaginas: Math.ceil(total / dto.limite),
     };
   }
+  /**
+   * El PDF de un informe publicado, para que la clínica compruebe QUÉ va a
+   * enviar antes de enviarlo.
+   *
+   * **No toca `abiertoEn` a propósito.** Esa marca significa que lo vio el
+   * PACIENTE: si la pusiera quien revisa desde el CRM, recepción dejaría de
+   * poder distinguir a quién seguir, que es justo para lo que existe. Por eso
+   * esto no reutiliza el camino del paciente ni le crea una sesión.
+   */
+  async pdfParaCrm(informeId: string): Promise<Buffer> {
+    const informe = await this.db.informe.findFirst({ where: { id: informeId, estado: 'PUBLICADO' }, select: { archivoId: true } });
+    if (!informe?.archivoId) problem(404, 'INFORME_NO_ENCONTRADO', 'No hay un informe publicado con ese identificador.');
+    return this.readFile(informe.archivoId);
+  }
+
   /** Los estudios ya registrados, para ofrecerlos como sugerencia al escribir. */
   async studyNames(): Promise<string[]> {
     const rows = await this.db.informe.groupBy({ by: ['estudio'], _count: { estudio: true }, orderBy: { _count: { estudio: 'desc' } }, take: 25 });
