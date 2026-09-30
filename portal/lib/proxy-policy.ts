@@ -1,4 +1,6 @@
 const uuid = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
+/** `<informeId>.<vence>.<firma>`: ver `src/results/revision.ts` en la API. */
+const enlaceRevision = `${uuid}\\.\\d{10}\\.[A-Za-z0-9_-]{43}`;
 export function allowed(path: string, method: string): boolean {
   if (method === "GET")
     return (
@@ -8,8 +10,10 @@ export function allowed(path: string, method: string): boolean {
         "v1/informes/configuracion",
         "v1/portal/informe",
         "v1/portal/informe/pdf",
+        "v1/portal/informe/pdf/original",
       ].includes(path) ||
-      new RegExp(`^v1/informes/${uuid}(/pdf)?$`, "i").test(path)
+      new RegExp(`^v1/informes/${uuid}(/pdf)?$`, "i").test(path) ||
+      new RegExp(`^v1/revision/${enlaceRevision}/pdf$`).test(path)
     );
   if (method !== "POST") return false;
   return (

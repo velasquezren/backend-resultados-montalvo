@@ -41,8 +41,12 @@ async function handler(
     path === "v1/auth/login" ||
     /^v1\/portal\/accesos\/[^/]+\/ingresar$/.test(path);
   const logout = path === "v1/auth/logout" || path === "v1/auth/password" || path === "v1/portal/salir";
-  const token = request.cookies.get(cookieName)?.value;
-  if (!login && !token)
+  /* El enlace de revisión del CRM: la firma de la URL es la credencial. Ni
+     pide ni reenvía cookies —un médico con sesión abierta en esta computadora
+     no la presta a la revisión— y un enlace vencido no le cierra la sesión. */
+  const revision = path.startsWith("v1/revision/");
+  const token = revision ? undefined : request.cookies.get(cookieName)?.value;
+  if (!login && !revision && !token)
     return error(401, "Tu sesión terminó. Vuelve a ingresar para continuar.");
   const multipart =
     request.headers.get("content-type")?.startsWith("multipart/form-data") ??
@@ -118,6 +122,11 @@ async function handler(
         ...noStore,
         "Content-Type":
           response.headers.get("content-type") || "application/json",
+        /* Con el tamaño, el visor del navegador muestra cuánto falta en vez
+           de una página en blanco mientras bajan los MB de una ecografía. */
+        ...(response.headers.get("content-length")
+          ? { "Content-Length": response.headers.get("content-length")! }
+          : {}),
         ...(response.headers.get("content-disposition")
           ? {
               "Content-Disposition": response.headers.get(
@@ -127,7 +136,7 @@ async function handler(
           : {}),
       },
     });
-    if ((logout && response.ok) || response.status === 401)
+    if (!revision && ((logout && response.ok) || response.status === 401))
       result.cookies.delete(cookieName);
     return result;
   } catch {

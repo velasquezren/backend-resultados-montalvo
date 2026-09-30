@@ -4,7 +4,7 @@ import { digest, token } from '../auth/crypto';
 import { AppConfig, CONFIG } from '../config';
 import { Database } from '../database';
 import { problem } from '../errors';
-import { Results } from './results';
+import { archivoParaVer, Results } from './results';
 
 @Injectable()
 export class PatientPortal {
@@ -45,13 +45,19 @@ export class PatientPortal {
     return { estado: report.estado, estudio: report.estudio, fechaEstudio: report.fechaEstudio, medico: report.medico.nombre,
       disponible: report.estado === 'PUBLICADO', mensaje: report.estado === 'PUBLICADO' ? 'Tu informe está disponible. Puedes descargarlo.' : 'Estamos preparando tu informe. Puedes volver a consultar más adelante.' };
   }
-  async download(secret: string) {
+  /**
+   * El PDF del paciente. Por omisión la versión liviana —la misma, con las
+   * fotos recomprimidas—, que abre en segundos con datos móviles. Con
+   * `original` el archivo tal cual lo publicó el médico, para quien lo quiera
+   * guardar o imprimir en la máxima calidad.
+   */
+  async download(secret: string, original = false) {
     const { access } = await this.access(secret); const report = access.informe;
     if (report.estado !== 'PUBLICADO' || !report.archivoId) problem(409, 'RESULTADO_EN_PREPARACION', 'Tu informe todavía está en preparación. Vuelve a consultar más adelante.');
-    const file = await this.results.readFile(report.archivoId);
+    const file = await this.results.readFile(original ? report.archivoId : archivoParaVer(report));
     // Revalida después de leer el almacenamiento: pudo retirarse entretanto.
     await this.access(secret);
-    await this.db.auditoria.create({ data: { actorId: access.id, informeId: report.id, accion: 'PDF_DESCARGADO_PACIENTE' } });
+    await this.db.auditoria.create({ data: { actorId: access.id, informeId: report.id, accion: original ? 'PDF_ORIGINAL_DESCARGADO_PACIENTE' : 'PDF_DESCARGADO_PACIENTE' } });
     return file;
   }
   async logout(secret: string) {

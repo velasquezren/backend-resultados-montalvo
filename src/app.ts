@@ -12,15 +12,16 @@ import { FileMakerGuard, FileMakerIntake } from './results/filemaker';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
 import { Mantenimiento } from './mantenimiento/mantenimiento';
-import { AuthController, CrmIntegrationController, FileMakerController, HealthController, PatientsController, PortalController, ResultsController } from './controllers';
+import { VistasLivianas } from './results/vistas';
+import { AuthController, CrmIntegrationController, FileMakerController, HealthController, PatientsController, PortalController, ResultsController, RevisionController } from './controllers';
 import { ApiErrors } from './errors';
 
 @Module({
-  controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, CrmIntegrationController, FileMakerController],
+  controllers: [HealthController, AuthController, PatientsController, ResultsController, PortalController, CrmIntegrationController, RevisionController, FileMakerController],
   providers: [
     { provide: CONFIG, useFactory: readConfig }, Database, Attempts, AuthService,
     { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner,
-    Patients, Results, PatientPortal, Mantenimiento, FileMakerIntake, FileMakerGuard,
+    Patients, Results, PatientPortal, Mantenimiento, VistasLivianas, FileMakerIntake, FileMakerGuard,
   ],
 })
 export class AppModule {}

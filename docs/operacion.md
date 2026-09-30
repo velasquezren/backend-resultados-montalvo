@@ -9,7 +9,7 @@ Este repositorio no configura dominios, infraestructura, facturación ni proveed
 3. Instalar ClamAV actualizado en red privada. Su puerto TCP no ofrece autenticación propia: no exponer 3310 a Internet. Configurar límites de análisis al menos iguales a los PDF admitidos, detectar archivos que exceden límites y actualizar firmas con freshclam. Comprobar archivo limpio, detección de prueba y caída del servicio.
 4. Configurar HTTPS, CORS exacto, clave HMAC, URL real del portal y credenciales independientes. Reverse proxy local compatible con `trust proxy=loopback`; si es remoto, configurar explícitamente los proxies confiables antes de usar límites por IP.
 5. Ejecutar migración una sola vez antes de iniciar nuevas instancias. `NODE_ENV=production` obliga R2 privado o disco cifrado, y ClamAV; no desactivarlo para eludir un fallo de configuración.
-6. Iniciar API y worker de mantenimiento como procesos distintos, usuario sin privilegios, reinicio supervisado y límites de CPU/RAM. El worker solo purga cada hora sesiones vencidas y contadores de intentos.
+6. Iniciar API y worker como procesos distintos (el worker genera las versiones livianas cada 30 s y purga sesiones cada hora), usuario sin privilegios, reinicio supervisado y límites de CPU/RAM. El worker necesita el mismo almacenamiento y la misma clave de cifrado que la API: lee el original y guarda la versión liviana.
 7. Crear usuarios individuales. Probar médico A/B, paciente, enlace vencido y extendido, y retiro. No reutilizar la cuenta de recepción del CRM.
 8. Configurar y desplegar el portal Next de `portal/`. Comprobar que ninguna ruta privada esté en sitemap/robots indexable, caché compartida o analítica. El backend por sí solo no hace accesible la pantalla del enlace.
 

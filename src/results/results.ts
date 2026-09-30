@@ -6,6 +6,7 @@ import { Database, Prisma, Transaction } from '../database';
 import { CrearInformeDto, InformesCrmDto, ListarDto, PublicarDto, RetirarDto } from '../dto';
 import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
+import { DURACION_REVISION_MS, firmarRevision, leerRevision } from './revision';
 
 export function scope(actor: Actor): Prisma.InformeWhereInput { return actor.rol === 'ADMIN' ? {} : { medicoId: actor.id }; }
 const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } } } satisfies Prisma.InformeInclude;
@@ -75,18 +76,30 @@ export class Results {
     };
   }
   /**
-   * El PDF de un informe publicado, para que la clínica compruebe QUÉ va a
-   * enviar antes de enviarlo.
+   * El enlace para que la clínica compruebe QUÉ va a enviar antes de
+   * enviarlo: la vista del portal con el PDF, como la ve el médico.
    *
-   * **No toca `abiertoEn` a propósito.** Esa marca significa que lo vio el
-   * PACIENTE: si la pusiera quien revisa desde el CRM, recepción dejaría de
-   * poder distinguir a quién seguir, que es justo para lo que existe. Por eso
-   * esto no reutiliza el camino del paciente ni le crea una sesión.
+   * El CRM recibe el enlace, nunca el PDF. Y **no toca `abiertoEn`**: esa
+   * marca significa que lo vio la PACIENTE; si la pusiera quien revisa desde el
+   * CRM, recepción dejaría de poder distinguir a quién seguir. Ver
+   * `revision.ts`.
    */
-  async pdfParaCrm(informeId: string): Promise<Buffer> {
-    const informe = await this.db.informe.findFirst({ where: { id: informeId, estado: 'PUBLICADO' }, select: { archivoId: true } });
-    if (!informe?.archivoId) problem(404, 'INFORME_NO_ENCONTRADO', 'No hay un informe publicado con ese identificador.');
-    return this.readFile(informe.archivoId);
+  async enlaceRevision(informeId: string) {
+    const informe = await this.db.informe.findFirst({ where: { id: informeId, estado: 'PUBLICADO' }, select: { id: true } });
+    if (!informe) problem(404, 'INFORME_NO_ENCONTRADO', 'No hay un informe publicado con ese identificador.');
+    const expiraEn = new Date(Date.now() + DURACION_REVISION_MS);
+    return { url: `${new URL(this.config.portalUrl).origin}/revision/${firmarRevision(informe.id, expiraEn, this.config.hmacKey)}`, expiraEn };
+  }
+
+  /** El PDF que abre un enlace de revisión vigente: la versión para ver. */
+  async pdfRevision(enlace: string): Promise<Buffer> {
+    const informeId = leerRevision(enlace, this.config.hmacKey);
+    if (!informeId) problem(401, 'REVISION_VENCIDA', 'Este enlace de revisión ya no es válido. Vuelve a abrir el informe desde el CRM.');
+    const informe = await this.db.informe.findFirst({ where: { id: informeId, estado: 'PUBLICADO' }, select: { archivoId: true, archivoVistaId: true } });
+    if (!informe?.archivoId) problem(404, 'INFORME_NO_ENCONTRADO', 'Este informe ya no está publicado.');
+    const pdf = await this.readFile(archivoParaVer(informe));
+    await this.db.auditoria.create({ data: { actorId: 'crm', accion: 'PDF_REVISADO_CRM', informeId } });
+    return pdf;
   }
 
   /** Los estudios ya registrados, para ofrecerlos como sugerencia al escribir. */
@@ -208,6 +221,16 @@ export class Results {
     return buffer;
   }
   private audit(tx: Transaction, actorId: string, accion: string, informeId: string) { return tx.auditoria.create({ data: { actorId, accion, informeId } }); }
+}
+
+/**
+ * El archivo que se MUESTRA: la versión liviana si ya existe, si no el
+ * original. El médico descarga siempre el original (`download`).
+ */
+export function archivoParaVer(informe: { archivoId: string | null; archivoVistaId: string | null }): string {
+  const archivo = informe.archivoVistaId ?? informe.archivoId;
+  if (!archivo) problem(409, 'RESULTADO_EN_PREPARACION', 'El informe todavía está en preparación.');
+  return archivo;
 }
 
 /** El acceso del paciente dura 30 días desde que se crea o se renueva. */

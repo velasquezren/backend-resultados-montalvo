@@ -37,3 +37,11 @@ test("CSRF requiere origen explícito exacto", () => {
   ])
     assert.equal(sameOrigin(origin, "https://resultados.example"), false);
 });
+test("el enlace de revisión del CRM: solo GET y solo con su forma exacta", () => {
+  const enlace = `00000000-0000-4000-8000-000000000000.1790000000.${"a".repeat(43)}`;
+  assert.equal(allowed(`v1/revision/${enlace}/pdf`, "GET"), true);
+  assert.equal(allowed(`v1/revision/${enlace}/pdf`, "POST"), false);
+  for (const malo of ["cualquiera", `${enlace}x`, enlace.replace(".1790000000.", ".179.")])
+    assert.equal(allowed(`v1/revision/${malo}/pdf`, "GET"), false);
+  assert.equal(allowed("v1/portal/informe/pdf/original", "GET"), true);
+});

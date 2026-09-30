@@ -52,7 +52,8 @@ Después de cualquier mutación, usar la nueva revisión. Tras 409 volver a cons
 | --- | --- |
 | POST `/v1/portal/accesos/:id/ingresar` | Sin cuerpo: el enlace es la llave → `{token,expiraEn}`. 401 si venció, se revocó o se retiró el informe |
 | GET `/v1/portal/informe` | Sesión paciente → `{estado,estudio,fechaEstudio,medico,disponible,mensaje}`. Si está publicado, marca la primera apertura |
-| GET `/v1/portal/informe/pdf` | Sesión paciente, informe publicado → `application/pdf` `inline`: se abre en el visor del teléfono |
+| GET `/v1/portal/informe/pdf` | Sesión paciente, informe publicado → `application/pdf` `inline`: se abre en el visor del teléfono. Sirve la **versión liviana** si ya existe (ver arquitectura), si no el original |
+| GET `/v1/portal/informe/pdf/original` | Igual, pero el archivo tal cual lo publicó el médico, `attachment`: para imprimir o guardar en máxima calidad |
 | POST `/v1/portal/salir` | Revoca sesión paciente |
 
 El token de paciente no autentica al médico ni viceversa. Acceso vencido/retirado: 401 con mensaje orientado a recuperación; borrador: consulta permitida con estado de preparación y descarga 409. 
@@ -66,3 +67,5 @@ Errores uniformes: `{error:{codigo,mensaje,campos?,requestId}}`. Usar `mensaje` 
 GET `/v1/integraciones/crm/informes?pagina=1&limite=50[&informeId=<uuid>]`, Bearer exclusivo `CRM_INTEGRATION_TOKEN` → `{datos:[{informeId,paciente:{nombre,pac,ci},estudio,fechaEstudio,publicadoEn,accesoId,accesoVigente,accesoExpiraEn,abiertoEn}],total,pagina,limite,totalPaginas}`. POST `/v1/integraciones/crm/informes/:id/acceso/renovar` extiende 30 días el enlace de un informe **publicado** (404 si no lo está, 409 si fue retirado). Solo informes publicados; nunca el PDF. Esa credencial no abre la API de los médicos. El vínculo con las fichas del CRM lo resuelve el CRM (ver [arquitectura](arquitectura.md#integración-crm)).
 
 Este proyecto no expone webhook de WhatsApp: el único receptor de eventos de Meta es el CRM.
+
+**Revisión desde el CRM (desde el 2026-09-29).** POST `/v1/integraciones/crm/informes/:id/revision` (credencial CRM) → `{url, expiraEn}`: un enlace al visor del portal, `<origen>/revision/<informeId>.<vence>.<firma>`, firmado con `SESSION_HMAC_KEY` y un prefijo propio, válido 10 minutos y solo para informes publicados (404 si no). El portal carga el PDF con GET `/v1/revision/<enlace>/pdf` —público; la firma es la credencial, 401 si no vale o venció, 404 si se retiró—, `inline`, versión liviana, auditado como `PDF_REVISADO_CRM` y **sin tocar `abiertoEn`**. El CRM recibe el enlace, nunca el PDF: la ruta anterior `GET /v1/integraciones/crm/informes/:id/pdf` se retiró.

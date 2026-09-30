@@ -71,6 +71,14 @@ model Informe {
   referenciaExterna String? @unique @db.VarChar(80)
   archivoId String? @unique @db.Uuid
   archivo Archivo? @relation("ArchivoActual", fields: [archivoId], references: [id])
+  /// La versión para VER: el mismo PDF con las fotos recomprimidas (ver
+  /// `src/files/aligerar.ts`). El original (`archivoId`) no se toca.
+  ///
+  /// - `null`: todavía no se generó; se sirve el original.
+  /// - igual a `archivoId`: no valía la pena aligerarlo; se sirve el original.
+  /// - otro archivo: la versión liviana, que es la que ven paciente y recepción.
+  archivoVistaId String? @unique @db.Uuid
+  archivoVista Archivo? @relation("ArchivoVista", fields: [archivoVistaId], references: [id])
   archivos Archivo[] @relation("ArchivosInforme")
   acceso AccesoPaciente?
   publicadoEn DateTime?
@@ -88,6 +96,7 @@ model Archivo {
   informeId String @db.Uuid
   informe Informe @relation("ArchivosInforme", fields: [informeId], references: [id])
   actualDe Informe? @relation("ArchivoActual")
+  vistaDe Informe? @relation("ArchivoVista")
   clave String @unique
   sha256 String
   bytes Int

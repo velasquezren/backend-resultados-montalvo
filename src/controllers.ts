@@ -83,6 +83,8 @@ export class PortalController {
   @Post('accesos/:id/ingresar') @HttpCode(200) login(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) { return this.portal.login(id, req.ip ?? 'unknown'); }
   @Get('informe') async detail(@Req() req: Request) { await this.attempts.consume('portal', req.ip ?? 'unknown', 120, 60); return this.portal.detail(bearer(req)); }
   @Get('informe/pdf') async download(@Req() req: Request, @Res() response: Response) { await this.attempts.consume('descarga-paciente', req.ip ?? 'unknown', 30, 60); fileResponse(response, await this.portal.download(bearer(req)), 'inline'); }
+  /** El PDF tal cual lo publicó el médico, en la máxima calidad. El de arriba es la versión liviana. */
+  @Get('informe/pdf/original') async original(@Req() req: Request, @Res() response: Response) { await this.attempts.consume('descarga-paciente', req.ip ?? 'unknown', 30, 60); fileResponse(response, await this.portal.download(bearer(req), true), 'attachment'); }
   @Post('salir') @HttpCode(200) logout(@Req() req: Request) { return this.portal.logout(bearer(req)); }
 }
 
@@ -102,15 +104,13 @@ export class CrmIntegrationController {
     return this.results.publishedForCrm(dto);
   }
   /**
-   * El PDF, para que la asistente vea qué informe va a enviar.
-   *
-   * Va por aquí y no por el enlace del paciente porque ese enlace marca
-   * `abiertoEn`, y entonces «Abierto por el paciente» diría que lo vio ella.
+   * El enlace para que la asistente vea qué informe va a enviar, en el visor
+   * del portal. El CRM recibe el enlace, nunca el PDF (ver `revision.ts`).
    */
-  @Get('informes/:id/pdf') async pdf(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request, @Res() res: Response) {
+  @Post('informes/:id/revision') @HttpCode(200) async revision(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     this.authorize(req);
-    await this.attempts.consume('crm-pdf', 'consumer', 120, 60);
-    fileResponse(res, await this.results.pdfParaCrm(id), 'inline');
+    await this.attempts.consume('crm-revision', 'consumer', 120, 60);
+    return this.results.enlaceRevision(id);
   }
 
   /** Recepción reenvía un aviso cuyo acceso venció: 30 días más, mismo enlace. */
@@ -118,6 +118,20 @@ export class CrmIntegrationController {
     this.authorize(req);
     await this.attempts.consume('crm-renovar', 'consumer', 30, 60);
     return this.results.renewAccessForCrm(id);
+  }
+}
+
+/**
+ * El PDF que abre un enlace de revisión del CRM. La firma del enlace es la
+ * credencial: sin sesión, válida 10 minutos y solo para informes publicados.
+ */
+@Public()
+@Controller('v1/revision')
+export class RevisionController {
+  constructor(private readonly results: Results, private readonly attempts: Attempts) {}
+  @Get(':enlace/pdf') async pdf(@Param('enlace') enlace: string, @Req() req: Request, @Res() response: Response) {
+    await this.attempts.consume('revision-ip', req.ip ?? 'unknown', 60, 60);
+    fileResponse(response, await this.results.pdfRevision(enlace), 'inline');
   }
 }
 

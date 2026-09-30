@@ -100,6 +100,12 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
                   <Icono d={DOCUMENTO} /> Ver informe
                 </a>
                 <p className="pac-nota">Se abre en el visor de tu teléfono, desde donde puedes guardarlo.</p>
+                {/* «Ver informe» abre la versión liviana, que carga rápido con
+                    datos móviles. Este es el archivo tal cual lo publicó el
+                    médico, para imprimirlo o guardarlo en máxima calidad. */}
+                <a className="pac-enlace" href="/api/v1/portal/informe/pdf/original">
+                  Descargar el original en alta calidad
+                </a>
               </>
             ) : (
               <p role="status" className="pac-aviso">{estado.result.mensaje}</p>

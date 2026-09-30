@@ -9,6 +9,8 @@ import { createApp } from '../src/app';
 import { Database } from '../src/database';
 import { AuthService } from '../src/auth/auth';
 import { Mantenimiento } from '../src/mantenimiento/mantenimiento';
+import { VistasLivianas } from '../src/results/vistas';
+import sharp from 'sharp';
 
 let app: Awaited<ReturnType<typeof createApp>>;
 let db: Database;
@@ -486,23 +488,34 @@ test('FileMaker: sin medico y sin valor por defecto lo dice claro', async () => 
 
 /* La asistente comprueba el PDF antes de enviarlo, y eso NO puede parecer que
    lo vio la paciente: «abierto» es la señal con la que recepción decide a quién
-   seguir. */
-test('el PDF para el CRM no marca el informe como abierto por el paciente', async () => {
+   seguir. Lo mira en el visor del portal con un enlace firmado de 10 minutos;
+   el CRM recibe el enlace, nunca el PDF. */
+const CRM = { Authorization: `Bearer ${'c'.repeat(40)}` };
+async function enlaceRevision(informeId: string) {
+  const r = await fetch(`${base}/v1/integraciones/crm/informes/${informeId}/revision`, { method: 'POST', headers: CRM });
+  return { status: r.status, data: await r.json() as { url: string; expiraEn: string } };
+}
+const pdfDeRevision = (url: string) => fetch(`${base}/v1/revision/${new URL(url).pathname.split('/').pop()}/pdf`);
+
+test('revisar desde el CRM no marca el informe como abierto por el paciente', async () => {
   const informe = await ready();
   assert.equal((await publish(informe.informe)).status, 200);
-  const antes = await db.accesoPaciente.findUniqueOrThrow({ where: { informeId: informe.informe.id }, select: { abiertoEn: true } });
-  assert.equal(antes.abiertoEn, null);
 
-  const url = `${base}/v1/integraciones/crm/informes/${informe.informe.id}/pdf`;
-  assert.equal((await fetch(url)).status, 401);
+  assert.equal((await fetch(`${base}/v1/integraciones/crm/informes/${informe.informe.id}/revision`, { method: 'POST' })).status, 401);
+  const enlace = await enlaceRevision(informe.informe.id);
+  assert.equal(enlace.status, 200);
+  assert.match(enlace.data.url, /^http:\/\/localhost:3000\/revision\/[0-9a-f-]{36}\.\d{10}\.[\w-]{43}$/, 'va al visor del portal, no a la API');
+  assert.ok(new Date(enlace.data.expiraEn).getTime() - Date.now() <= 10 * 60_000);
 
-  const pdfCrm = await fetch(url, { headers: { Authorization: `Bearer ${'c'.repeat(40)}` } });
-  assert.equal(pdfCrm.status, 200);
-  assert.equal(pdfCrm.headers.get('content-type'), 'application/pdf');
-  assert.ok((await pdfCrm.arrayBuffer()).byteLength > 0);
+  const pdfRevisado = await pdfDeRevision(enlace.data.url);
+  assert.equal(pdfRevisado.status, 200);
+  assert.equal(pdfRevisado.headers.get('content-type'), 'application/pdf');
+  assert.equal(pdfRevisado.headers.get('content-disposition')?.startsWith('inline'), true, 'se ve en el visor, no se descarga');
+  assert.deepEqual(Buffer.from(await pdfRevisado.arrayBuffer()), pdf);
 
   const despues = await db.accesoPaciente.findUniqueOrThrow({ where: { informeId: informe.informe.id }, select: { abiertoEn: true } });
   assert.equal(despues.abiertoEn, null, 'revisar desde el CRM no es que lo abriera la paciente');
+  assert.equal(await db.auditoria.count({ where: { informeId: informe.informe.id, accion: 'PDF_REVISADO_CRM' } }), 1);
 
   // Y cuando la paciente SÍ entra por su enlace, ahí sí queda marcado.
   const sesion = await api<{ token: string }>(`/v1/portal/accesos/${informe.acceso.id}/ingresar`, 'POST', {});
@@ -512,8 +525,76 @@ test('el PDF para el CRM no marca el informe como abierto por el paciente', asyn
   assert.notEqual(trasPaciente.abiertoEn, null);
 });
 
-test('el PDF para el CRM solo existe si el informe está publicado', async () => {
+test('el enlace de revisión: solo de publicados, no se adultera y el retiro lo corta', async () => {
   const borrador = await ready();
-  const r = await fetch(`${base}/v1/integraciones/crm/informes/${borrador.informe.id}/pdf`, { headers: { Authorization: `Bearer ${'c'.repeat(40)}` } });
-  assert.equal(r.status, 404);
+  assert.equal((await enlaceRevision(borrador.informe.id)).status, 404);
+
+  const informe = await ready();
+  const publicado = await publish(informe.informe);
+  const enlace = await enlaceRevision(informe.informe.id);
+  const token = new URL(enlace.data.url).pathname.split('/').pop()!;
+  const otro = await ready(); await publish(otro.informe);
+  const adulterado = token.replace(/^[0-9a-f-]{36}/, otro.informe.id);
+  assert.equal((await fetch(`${base}/v1/revision/${adulterado}/pdf`)).status, 401, 'la firma es de un informe, no sirve para otro');
+  assert.equal((await fetch(`${base}/v1/revision/no-es-un-enlace/pdf`)).status, 401);
+
+  assert.equal((await api(`/v1/informes/${informe.informe.id}/retirar`, 'POST', { revision: publicado.data.revision, motivo: 'Prueba de retiro' }, medico)).status, 200);
+  assert.equal((await pdfDeRevision(enlace.data.url)).status, 404, 'retirado, el enlace ya abierto deja de servir');
+
+  // El CRM ya no recibe el PDF: solo el enlace.
+  assert.equal((await fetch(`${base}/v1/integraciones/crm/informes/${otro.informe.id}/pdf`, { headers: CRM })).status, 404);
+});
+
+/* Una «ecografía» sintética: ruido sobre degradado, 1136×852, en calidad
+   máxima como la exporta FileMaker. */
+async function informeConFoto(): Promise<Buffer> {
+  const ancho = 1136, alto = 852, px = Buffer.alloc(ancho * alto * 3);
+  let semilla = 11;
+  for (let i = 0; i < px.length; i++) { semilla = (semilla * 1103515245 + 12345) & 0x7fffffff; px[i] = ((i / 3) % ancho) * 200 / ancho + (semilla % 40); }
+  const documento = await PDFDocument.create();
+  const foto = await documento.embedJpg(await sharp(px, { raw: { width: ancho, height: alto, channels: 3 } }).jpeg({ quality: 100 }).toBuffer());
+  for (let i = 0; i < 2; i++) documento.addPage([595, 842]).drawImage(foto, { x: 50, y: 300, width: 495, height: 371 });
+  return Buffer.from(await documento.save());
+}
+
+test('versión liviana: paciente y recepción ven la liviana; el original sigue intacto y descargable', async () => {
+  const original = await informeConFoto();
+  const creado = await create();
+  const subido = await upload(creado.informe, medico, original);
+  assert.equal(subido.status, 201);
+  assert.equal((await publish(subido.data)).status, 200);
+
+  // Hasta que el worker la genera, se sirve el original: nadie se queda sin informe.
+  const sesion = await patientLogin(creado.acceso);
+  const verPaciente = () => fetch(`${base}/v1/portal/informe/pdf`, { headers: { Authorization: `Bearer ${sesion.data.token}` } });
+  assert.deepEqual(Buffer.from(await (await verPaciente()).arrayBuffer()), original);
+
+  await app.get(VistasLivianas).generarPendientes(100);
+  const informe = await db.informe.findUniqueOrThrow({ where: { id: creado.informe.id }, select: { archivoId: true, archivoVistaId: true, revision: true } });
+  assert.ok(informe.archivoVistaId && informe.archivoVistaId !== informe.archivoId, 'debía generar un archivo nuevo');
+  assert.equal(informe.revision, subido.data.revision + 1, 'generar la vista no cambia la revisión que el médico tiene abierta');
+
+  const liviano = Buffer.from(await (await verPaciente()).arrayBuffer());
+  assert.ok(liviano.length < original.length * 0.8, `${liviano.length} no es al menos 20 % menor que ${original.length}`);
+  assert.equal((await PDFDocument.load(liviano)).getPageCount(), 2);
+
+  const conOriginal = await fetch(`${base}/v1/portal/informe/pdf/original`, { headers: { Authorization: `Bearer ${sesion.data.token}` } });
+  assert.equal(conOriginal.headers.get('content-disposition')?.startsWith('attachment'), true);
+  assert.deepEqual(Buffer.from(await conOriginal.arrayBuffer()), original, 'el original, byte a byte');
+
+  const medicoDescarga = await fetch(`${base}/v1/informes/${creado.informe.id}/pdf`, { headers: { Authorization: `Bearer ${medico}` } });
+  assert.deepEqual(Buffer.from(await medicoDescarga.arrayBuffer()), original, 'el médico ve lo que publicó');
+
+  const enlace = await enlaceRevision(creado.informe.id);
+  assert.deepEqual(Buffer.from(await (await pdfDeRevision(enlace.data.url)).arrayBuffer()), liviano, 'recepción ve la liviana');
+  assert.equal(await db.auditoria.count({ where: { informeId: creado.informe.id, accion: 'PDF_VISTA_GENERADA' } }), 1);
+});
+
+test('versión liviana: sin fotos que ganar, la vista es el mismo original y no se reintenta', async () => {
+  const informe = await ready();
+  assert.equal((await publish(informe.informe)).status, 200);
+  await app.get(VistasLivianas).generarPendientes(100);
+  const tras = await db.informe.findUniqueOrThrow({ where: { id: informe.informe.id }, select: { archivoId: true, archivoVistaId: true } });
+  assert.equal(tras.archivoVistaId, tras.archivoId);
+  assert.equal(await db.archivo.count({ where: { informeId: informe.informe.id } }), 1, 'no se guardó un segundo archivo');
 });

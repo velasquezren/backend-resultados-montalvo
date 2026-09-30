@@ -816,3 +816,44 @@ dialog p {
   .pac-tarjeta, .pac-lista, .pac-esqueleto { animation: none; }
   .pac-boton { transition: none; }
 }
+
+/* ── Revisión desde el CRM ──────────────────────────────────────────────
+   El visor ocupa todo lo que queda: recepción viene a mirar el informe, no
+   a leer la página. */
+.rev {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: 12px 16px 16px;
+  gap: 12px;
+}
+.rev-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rev-cabecera > div {
+  flex: 1;
+  min-width: 0;
+}
+.rev-cabecera h1 {
+  margin: 0;
+  font-size: 16px;
+}
+.rev-cabecera p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rev-visor {
+  flex: 1;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--wash);
+}
+.rev-aviso {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}

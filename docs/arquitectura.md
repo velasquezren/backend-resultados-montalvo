@@ -14,6 +14,7 @@ Se comparte la identidad visual mediante los tokens existentes de Next, no media
 | `results` | Pacientes, ciclo del informe, permiso del médico y acceso del paciente |
 | `files` | PDF, antivirus, integridad y almacenamiento privado |
 | `mantenimiento` | Purga horaria de sesiones vencidas y contadores de intentos (proceso worker) |
+| `results/vistas.ts` + `files/aligerar.ts` | Versión liviana para VER de cada informe publicado (proceso worker, cada 30 s) |
 | `controllers.ts` | Contratos HTTP y aplicación de permisos a los adaptadores |
 
 Un solo módulo Nest reúne estos servicios para evitar estructura ceremonial. No hay repositorio genérico, entidades de reservas ficticias ni un sistema extensible de plugins prematuro. Si un dominio futuro crece, tendrá su módulo y sus contratos propios.
@@ -23,6 +24,7 @@ Un solo módulo Nest reúne estos servicios para evitar estructura ceremonial. N
 - CI/PAC únicos, búsqueda exacta y normalización conservadora. No se fusionan pacientes automáticamente.
 - `revision` exige actualización optimista para carga, publicación, renovación y retiro. Una operación desactualizada responde 409.
 - Archivo publicado inmutable. Se conserva historial de adjuntos; retirar no borra registros clínicos.
+- **Versión para ver (desde el 2026-09-29).** El 96-97 % del peso de un informe son las fotos de la ecografía, que FileMaker exporta en calidad máxima (3-5 MB por informe; medido en producción). El worker genera para cada informe publicado un `Archivo` nuevo con las fotos recomprimidas (JPEG calidad 80 con mozjpeg, mismas dimensiones; texto, fuentes y vectores byte a byte iguales; CMYK o espacios con perfil no se tocan). Queda en `Informe.archivoVistaId`, cifrado y verificado por SHA-256 como el original. Paciente y recepción ven esa versión (~60 % menos en un informe real, sin diferencia visible); el médico y «Descargar el original» reciben el publicado intacto. `null` = pendiente (se sirve el original); igual a `archivoId` = no valía la pena. La entrada desde FileMaker no cambia.
 - Publicación y auditoría se guardan en una transacción; dos publicaciones simultáneas dejan una sola.
 - Los instantes se almacenan como UTC; `fechaEstudio` es fecha clínica sin hora y se valida con el calendario de Bolivia. Quien la muestre debe formatearla en UTC, o en Bolivia aparece el día anterior.
 
