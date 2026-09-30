@@ -1,4 +1,5 @@
-import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
+import { inflateSync } from 'node:zlib';
+import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream } from 'pdf-lib';
 import sharp from 'sharp';
 
 /**
@@ -15,6 +16,16 @@ const AHORRO_MINIMO = 0.2;
 const MEJORA_MINIMA_POR_FOTO = 0.9;
 
 /**
+ * Una imagen SIN pérdida (Flate) solo pasa a JPEG si es grande y si el JPEG
+ * pesa menos de la mitad. Una foto de ecografía baja a una fracción; un logo,
+ * un gráfico o un texto escaneado no, y ahí el JPEG solo añadiría borrones.
+ */
+const PIXELES_MINIMOS_FOTO = 250_000;
+const MEJORA_MINIMA_SIN_PERDIDA = 0.5;
+/** Techo contra un PDF que declare una imagen descomunal: 25 megapíxeles. */
+const PIXELES_MAXIMOS = 25_000_000;
+
+/**
  * La versión del informe para VER: el mismo PDF con las fotos recomprimidas.
  *
  * Medido en producción el 2026-09-29: el 96-97 % del peso de un informe son
@@ -23,14 +34,20 @@ const MEJORA_MINIMA_POR_FOTO = 0.9;
  * de 3 MB tardaba segundos en abrir con la conexión de la clínica y con los
  * datos móviles de la paciente.
  *
+ * Las fotos pueden venir en JPEG (FileMaker 19 las exporta así) o SIN pérdida
+ * con Flate (FileMaker 20.1: 1264×880, ~580 KB cada una; su informe de 4,8 MB
+ * no bajaba nada). Las dos terminan en JPEG de calidad 80.
+ *
  * Qué NO toca, a propósito:
  * - El original. Esto devuelve un archivo NUEVO; el publicado sigue inmutable
  *   y se puede descargar tal cual.
  * - Las dimensiones de las fotos: solo se recomprime, no se reduce.
- * - Todo lo que no sea una foto JPEG RGB o en grises de 8 bits sin filtros
- *   encadenados ni `/Decode`: un CMYK o un espacio de color con perfil se
- *   leería con otros colores al recodificarlo, y ahorrar no justifica ese
- *   riesgo en un documento clínico.
+ * - Todo lo que no sea una foto RGB o en grises de 8 bits sin filtros
+ *   encadenados, `/Decode`, predictores ni transparencia: un CMYK o un
+ *   espacio de color con perfil se leería con otros colores al recodificarlo,
+ *   y ahorrar no justifica ese riesgo en un documento clínico.
+ * - Imágenes sin pérdida que no parecen fotos (pequeñas, o que en JPEG no
+ *   bajan a la mitad): logos, gráficos, firmas.
  * - Texto, fuentes, vectores, páginas y su orden.
  *
  * Devuelve `null` si no hay nada que ganar: sin fotos que recomprimir o con
@@ -44,22 +61,19 @@ export async function aligerarPdf(original: Buffer): Promise<Buffer | null> {
     if (!(objeto instanceof PDFRawStream)) continue;
     const { dict } = objeto;
     if (dict.get(PDFName.of('Subtype')) !== PDFName.of('Image')) continue;
-    if (dict.get(PDFName.of('Filter')) !== PDFName.of('DCTDecode')) continue;
     if (dict.has(PDFName.of('Decode'))) continue;
     const espacio = dict.get(PDFName.of('ColorSpace'));
     const canales = espacio === PDFName.of('DeviceRGB') ? 3 : espacio === PDFName.of('DeviceGray') ? 1 : 0;
     if (!canales) continue;
 
-    const foto = Buffer.from(objeto.contents);
-    const info = await sharp(foto).metadata().catch(() => null);
-    if (!info || info.channels !== canales || info.depth !== 'uchar') continue;
+    const filtro = dict.get(PDFName.of('Filter'));
+    const liviana =
+      filtro === PDFName.of('DCTDecode') ? await recomprimirJpeg(Buffer.from(objeto.contents), canales)
+      : filtro === PDFName.of('FlateDecode') ? await fotoSinPerdidaAJpeg(pdf, dict, Buffer.from(objeto.contents), canales)
+      : null;
+    if (!liviana) continue;
 
-    /* Sin `.rotate()`: el visor de PDF ignora la orientación EXIF y sharp la
-       descarta al escribir, así que la foto se ve igual que antes. */
-    const imagen = canales === 1 ? sharp(foto).toColourspace('b-w') : sharp(foto);
-    const liviana = await imagen.jpeg({ quality: CALIDAD_VISTA, mozjpeg: true }).toBuffer();
-    if (liviana.length >= foto.length * MEJORA_MINIMA_POR_FOTO) continue;
-
+    dict.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
     /* `Length` lo recalcula pdf-lib al escribir el stream. */
     pdf.context.assign(ref, PDFRawStream.of(dict, liviana));
     recomprimidas++;
@@ -68,4 +82,40 @@ export async function aligerarPdf(original: Buffer): Promise<Buffer | null> {
   if (!recomprimidas) return null;
   const resultado = Buffer.from(await pdf.save({ useObjectStreams: false }));
   return resultado.length <= original.length * (1 - AHORRO_MINIMO) ? resultado : null;
+}
+
+/** Una foto que ya es JPEG, a calidad 80. `null` si no cumple o no gana al menos un 10 %. */
+async function recomprimirJpeg(foto: Buffer, canales: number): Promise<Buffer | null> {
+  const info = await sharp(foto).metadata().catch(() => null);
+  if (!info || info.channels !== canales || info.depth !== 'uchar') return null;
+  /* Sin `.rotate()`: el visor de PDF ignora la orientación EXIF y sharp la
+     descarta al escribir, así que la foto se ve igual que antes. */
+  const imagen = canales === 1 ? sharp(foto).toColourspace('b-w') : sharp(foto);
+  const liviana = await imagen.jpeg({ quality: CALIDAD_VISTA, mozjpeg: true }).toBuffer();
+  return liviana.length < foto.length * MEJORA_MINIMA_POR_FOTO ? liviana : null;
+}
+
+/**
+ * Una foto guardada sin pérdida (Flate, sin predictor ni transparencia) a
+ * JPEG de calidad 80. `null` si no parece una foto o no cumple la forma
+ * simple: píxeles crudos de 8 bits, uno por canal, sin nada más.
+ */
+async function fotoSinPerdidaAJpeg(pdf: PDFDocument, dict: PDFDict, comprimida: Buffer, canales: number): Promise<Buffer | null> {
+  if (dict.has(PDFName.of('DecodeParms')) || dict.has(PDFName.of('SMask')) || dict.has(PDFName.of('Mask'))) return null;
+  const numero = (clave: string) => pdf.context.lookupMaybe(dict.get(PDFName.of(clave)), PDFNumber)?.asNumber();
+  const ancho = numero('Width'), alto = numero('Height');
+  if (numero('BitsPerComponent') !== 8 || !ancho || !alto) return null;
+  const pixeles = ancho * alto;
+  if (pixeles < PIXELES_MINIMOS_FOTO || pixeles > PIXELES_MAXIMOS) return null;
+
+  const esperados = pixeles * canales;
+  let crudo: Buffer;
+  try { crudo = inflateSync(comprimida, { maxOutputLength: esperados }); }
+  catch { return null; }
+  if (crudo.length !== esperados) return null;
+
+  const jpeg = await sharp(crudo, { raw: { width: ancho, height: alto, channels: canales as 1 | 3 } })
+    .jpeg({ quality: CALIDAD_VISTA, mozjpeg: true })
+    .toBuffer();
+  return jpeg.length < comprimida.length * MEJORA_MINIMA_SIN_PERDIDA ? jpeg : null;
 }

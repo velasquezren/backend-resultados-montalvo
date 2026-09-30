@@ -136,3 +136,42 @@ test('enlace de revisión: vale para su informe, vence a su hora y no se falsifi
   assert.equal(leerRevision(`${id}.${venceSeg}.${firma.slice(0, -1)}${otraLetra}`, clave), null, 'una firma alterada no vale');
   assert.equal(leerRevision('cualquier-cosa', clave), null);
 });
+
+import { deflateSync } from 'node:zlib';
+/** Un PDF con una imagen guardada SIN pérdida (Flate, píxeles crudos), como la exporta FileMaker 20.1. */
+async function pdfConImagenSinPerdida(ancho: number, alto: number, pixel: (i: number) => number): Promise<Buffer> {
+  const crudo = Buffer.alloc(ancho * alto * 3);
+  for (let i = 0; i < crudo.length; i++) crudo[i] = pixel(i);
+  const pdf = await PDFDocument.create();
+  const ref = pdf.context.register(pdf.context.stream(deflateSync(crudo), {
+    Type: 'XObject', Subtype: 'Image', Width: ancho, Height: alto, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'FlateDecode',
+  }));
+  const pagina = pdf.addPage([595, 842]);
+  pagina.node.setXObject(PDFName.of('Foto'), ref);
+  pagina.drawText('Informe sintético', { x: 50, y: 800, size: 12 });
+  return Buffer.from(await pdf.save());
+}
+
+test('versión liviana: una foto sin pérdida (FileMaker 20.1) pasa a JPEG con las mismas dimensiones', async () => {
+  let semilla = 5;
+  const original = await pdfConImagenSinPerdida(1264, 880, i => { semilla = (semilla * 1103515245 + 12345) & 0x7fffffff; return ((i / 3) % 1264) * 200 / 1264 + (semilla % 40); });
+  const liviano = await aligerarPdf(original);
+  assert.ok(liviano && liviano.length < original.length * 0.5, 'una foto sin pérdida debía bajar a menos de la mitad');
+  const [foto] = fotosDe(await PDFDocument.load(liviano));
+  assert.equal(foto!.dict.get(PDFName.of('Filter')), PDFName.of('DCTDecode'));
+  const info = await sharp(Buffer.from(foto!.contents)).metadata();
+  assert.deepEqual([info.width, info.height, info.channels], [1264, 880, 3]);
+  assert.equal((await validatePdf(liviano)).paginas, 1);
+});
+
+test('versión liviana: un gráfico sin pérdida (colores planos) no se pasa a JPEG', async () => {
+  /* Franjas de color: en Flate pesan casi nada y en JPEG saldrían con borrones. */
+  const grafico = await pdfConImagenSinPerdida(1000, 600, i => (Math.floor((i / 3) / 5000) % 2) * 255);
+  assert.equal(await aligerarPdf(grafico), null);
+});
+
+test('versión liviana: una imagen sin pérdida pequeña (un logo) no se toca', async () => {
+  let semilla = 9;
+  const logo = await pdfConImagenSinPerdida(158, 105, () => { semilla = (semilla * 1103515245 + 12345) & 0x7fffffff; return semilla % 256; });
+  assert.equal(await aligerarPdf(logo), null);
+});
