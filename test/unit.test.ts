@@ -175,3 +175,13 @@ test('versión liviana: una imagen sin pérdida pequeña (un logo) no se toca', 
   const logo = await pdfConImagenSinPerdida(158, 105, () => { semilla = (semilla * 1103515245 + 12345) & 0x7fffffff; return semilla % 256; });
   assert.equal(await aligerarPdf(logo), null);
 });
+
+test('versión liviana: un JPEG pequeño (el logo del encabezado) no se recomprime', async () => {
+  let semilla = 13;
+  const px = Buffer.alloc(324 * 292 * 3);
+  for (let i = 0; i < px.length; i++) { semilla = (semilla * 1103515245 + 12345) & 0x7fffffff; px[i] = semilla % 256; }
+  const logo = await sharp(px, { raw: { width: 324, height: 292, channels: 3 } }).jpeg({ quality: 100 }).toBuffer();
+  const pdf = await PDFDocument.create();
+  pdf.addPage().drawImage(await pdf.embedJpg(logo), { x: 10, y: 10, width: 100, height: 90 });
+  assert.equal(await aligerarPdf(Buffer.from(await pdf.save())), null);
+});

@@ -16,11 +16,17 @@ const AHORRO_MINIMO = 0.2;
 const MEJORA_MINIMA_POR_FOTO = 0.9;
 
 /**
- * Una imagen SIN pérdida (Flate) solo pasa a JPEG si es grande y si el JPEG
- * pesa menos de la mitad. Una foto de ecografía baja a una fracción; un logo,
- * un gráfico o un texto escaneado no, y ahí el JPEG solo añadiría borrones.
+ * Solo se tocan imágenes grandes: las fotos de la ecografía rondan el millón
+ * de píxeles. Un logo o un encabezado son chicos, ahorran casi nada y es donde
+ * recomprimir se nota: el logo del encabezado (324×292, JPEG) daba 28 dB
+ * contra 33-39 dB de las fotos (medido en producción el 2026-09-29).
  */
 const PIXELES_MINIMOS_FOTO = 250_000;
+/**
+ * Una imagen SIN pérdida (Flate) solo pasa a JPEG si además el JPEG pesa
+ * menos de la mitad. Una foto de ecografía baja a una fracción; un gráfico o
+ * un texto escaneado no, y ahí el JPEG solo añadiría borrones.
+ */
 const MEJORA_MINIMA_SIN_PERDIDA = 0.5;
 /** Techo contra un PDF que declare una imagen descomunal: 25 megapíxeles. */
 const PIXELES_MAXIMOS = 25_000_000;
@@ -46,8 +52,8 @@ const PIXELES_MAXIMOS = 25_000_000;
  *   encadenados, `/Decode`, predictores ni transparencia: un CMYK o un
  *   espacio de color con perfil se leería con otros colores al recodificarlo,
  *   y ahorrar no justifica ese riesgo en un documento clínico.
- * - Imágenes sin pérdida que no parecen fotos (pequeñas, o que en JPEG no
- *   bajan a la mitad): logos, gráficos, firmas.
+ * - Imágenes chicas (logos, encabezados, firmas) y, sin pérdida, las que en
+ *   JPEG no bajan a la mitad (gráficos): no son fotos.
  * - Texto, fuentes, vectores, páginas y su orden.
  *
  * Devuelve `null` si no hay nada que ganar: sin fotos que recomprimir o con
@@ -88,6 +94,7 @@ export async function aligerarPdf(original: Buffer): Promise<Buffer | null> {
 async function recomprimirJpeg(foto: Buffer, canales: number): Promise<Buffer | null> {
   const info = await sharp(foto).metadata().catch(() => null);
   if (!info || info.channels !== canales || info.depth !== 'uchar') return null;
+  if (!info.width || !info.height || info.width * info.height < PIXELES_MINIMOS_FOTO) return null;
   /* Sin `.rotate()`: el visor de PDF ignora la orientación EXIF y sharp la
      descarta al escribir, así que la foto se ve igual que antes. */
   const imagen = canales === 1 ? sharp(foto).toColourspace('b-w') : sharp(foto);
