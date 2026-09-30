@@ -598,3 +598,57 @@ test('versión liviana: sin fotos que ganar, la vista es el mismo original y no 
   assert.equal(tras.archivoVistaId, tras.archivoId);
   assert.equal(await db.archivo.count({ where: { informeId: informe.informe.id } }), 1, 'no se guardó un segundo archivo');
 });
+
+/**
+ * Las pestañas de la cola del CRM se filtran AQUÍ, donde se corta la página.
+ * Si el CRM filtrara una página ya cortada, «por avisar» mostraría 3 de 25 y
+ * diría «no hay más» cuando las hay en la siguiente.
+ */
+test('la cola del CRM se filtra por búsqueda, apertura y vigencia, y el panorama da el conjunto de trabajo', async () => {
+  const n = randomUUID().slice(0, 8).toUpperCase();
+  const crm = 'c'.repeat(40);
+  const [pendiente, abierto, vencido] = [await ready({ pac: `PAN-${n}-A` }), await ready({ pac: `PAN-${n}-B` }), await ready({ pac: `PAN-${n}-C` })];
+  for (const r of [pendiente, abierto, vencido]) assert.equal((await publish(r.informe)).status, 200);
+
+  /* Abierto de verdad: la paciente entra por su enlace. */
+  const sesion = await patientLogin(abierto.acceso);
+  assert.equal((await api('/v1/portal/informe', 'GET', undefined, sesion.data.token)).status, 200);
+  await db.accesoPaciente.update({ where: { id: vencido.acceso.id }, data: { expiraEn: new Date(Date.now() - 60_000) } });
+
+  type Panorama = { totales: { todos: number; abiertos: number; vencidosSinAbrir: number }; vigentesSinAbrir: string[]; truncado: boolean; coinciden?: string[] };
+  const panorama = await api<Panorama>('/v1/integraciones/crm/informes/panorama', 'GET', undefined, crm);
+  assert.equal(panorama.status, 200);
+  assert.ok(panorama.data.vigentesSinAbrir.includes(pendiente.informe.id), 'vigente y sin abrir: al conjunto de trabajo');
+  assert.equal(panorama.data.vigentesSinAbrir.includes(abierto.informe.id), false, 'abierto: fuera');
+  assert.equal(panorama.data.vigentesSinAbrir.includes(vencido.informe.id), false, 'vencido: fuera');
+  assert.equal(panorama.data.truncado, false);
+  assert.equal('coinciden' in panorama.data, false, 'sin búsqueda no hay nada que marcar');
+
+  /* La búsqueda marca, pero NO mueve los totales: un contador que cambia
+     mientras escribes no sirve para decidir. */
+  const buscado = await api<Panorama>(`/v1/integraciones/crm/informes/panorama?buscar=${encodeURIComponent(`pan-${n}-a`)}`, 'GET', undefined, crm);
+  assert.deepEqual(buscado.data.coinciden, [pendiente.informe.id]);
+  assert.deepEqual(buscado.data.totales, panorama.data.totales);
+
+  type Cola = { datos: Array<{ informeId: string }>; total: number };
+  const ids = async (query: string) => (await api<Cola>(`/v1/integraciones/crm/informes?limite=100&${query}`, 'GET', undefined, crm)).data.datos.map(f => f.informeId);
+  assert.ok((await ids('abierto=true')).includes(abierto.informe.id));
+  assert.equal((await ids('abierto=true')).includes(pendiente.informe.id), false);
+  const vencidos = await ids('vigente=false&abierto=false');
+  assert.ok(vencidos.includes(vencido.informe.id));
+  assert.equal(vencidos.includes(pendiente.informe.id), false);
+  assert.deepEqual(await ids(`buscar=${encodeURIComponent(`pan-${n}-b`)}`), [abierto.informe.id], 'busca por PAC sin distinguir mayúsculas');
+  /* Por ids, en el orden pedido: la página que ya ordenó el CRM. */
+  assert.deepEqual(await ids(`ids=${vencido.informe.id},${pendiente.informe.id}`), [vencido.informe.id, pendiente.informe.id]);
+
+  /* Prisma no escapa los comodines de LIKE: sin escaparlos, `%%` devolvía la
+     cola entera y `_` casaba con cualquier letra. */
+  assert.deepEqual(await ids(`buscar=${encodeURIComponent('%%')}`), []);
+  assert.deepEqual((await api<Panorama>(`/v1/integraciones/crm/informes/panorama?buscar=${encodeURIComponent('__')}`, 'GET', undefined, crm)).data.coinciden, []);
+  assert.equal((await api<{ total: number }>(`/v1/informes?buscar=${encodeURIComponent('%%')}`, 'GET', undefined, medico)).data.total, 0, 'el buscador del médico tampoco');
+
+  for (const mala of ['abierto=si', 'vigente=1', 'ids=no-es-uuid', 'buscar=x']) {
+    assert.equal((await api(`/v1/integraciones/crm/informes?${mala}`, 'GET', undefined, crm)).status, 400, mala);
+  }
+  assert.equal((await api('/v1/integraciones/crm/informes/panorama', 'GET')).status, 401);
+});

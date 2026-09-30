@@ -1,5 +1,5 @@
 import { Type, Transform } from 'class-transformer';
-import { Equals, IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, Equals, IsArray, IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min } from 'class-validator';
 import { EstadoInforme, Rol } from './generated/prisma/client';
 
 export class LoginDto {
@@ -84,11 +84,39 @@ export class ListarDto {
   @IsOptional() @IsUUID() pacienteId?: string;
   @IsOptional() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(2, 160) buscar?: string;
 }
+/** Un booleano que llega por query string: solo `true`/`false` literales. */
+const booleanoDeQuery = ({ value }: { value: unknown }) => (value === 'true' ? true : value === 'false' ? false : value);
+const recortar = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
+/**
+ * Filtros de la cola del CRM. Todos se resuelven AQUÍ, donde se corta la
+ * página: si el CRM filtrara una página que ya cortó el portal, una pestaña
+ * mostraría 3 de 25 y diría «no hay más» cuando las hay en la siguiente.
+ */
 export class InformesCrmDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) pagina = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite = 50;
   /** Un solo informe: el CRM revalida contra el portal justo antes de enviar. */
   @IsOptional() @IsUUID() informeId?: string;
+  /** Nombre, PAC o CI del paciente. */
+  @IsOptional() @Transform(recortar) @IsString() @Length(2, 80) buscar?: string;
+  /** `true`: la paciente ya lo abrió. `false`: todavía no. */
+  @IsOptional() @Transform(booleanoDeQuery) @IsBoolean() abierto?: boolean;
+  /** `true`: el enlace sirve hoy. `false`: venció o se revocó. */
+  @IsOptional() @Transform(booleanoDeQuery) @IsBoolean() vigente?: boolean;
+  /**
+   * Varios informes por id, en el orden que se pidan: la página de una pestaña
+   * que decide el CRM (qué está avisado solo lo sabe él). `a,b,c` en la query.
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.split(',').filter(Boolean) : value))
+  @IsArray() @ArrayMaxSize(100) @IsUUID('all', { each: true })
+  ids?: string[];
+}
+
+/** El panorama de la cola: la búsqueda solo marca qué ids coinciden. */
+export class PanoramaCrmDto {
+  @IsOptional() @Transform(recortar) @IsString() @Length(2, 80) buscar?: string;
 }
 export class PasswordDto {
   @IsString() @Length(1, 128) actual!: string;

@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Actor } from '../auth/auth';
 import { AppConfig, CONFIG } from '../config';
 import { Database, Prisma, Transaction } from '../database';
-import { CrearInformeDto, InformesCrmDto, ListarDto, PublicarDto, RetirarDto } from '../dto';
+import { CrearInformeDto, InformesCrmDto, ListarDto, PanoramaCrmDto, PublicarDto, RetirarDto } from '../dto';
 import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { DURACION_REVISION_MS, firmarRevision, leerRevision } from './revision';
@@ -15,6 +15,39 @@ const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true 
  * completo obligaba a Prisma a consultar cinco relaciones por página para
  * descartarlas en el cliente.
  */
+/**
+ * Tope del conjunto de trabajo que el panorama devuelve entero. Ese conjunto
+ * —vigentes y sin abrir— lo acota el negocio: un enlace dura 30 días. Con
+ * 50 informes al día son ~1.500; el tope deja margen de sobra y, si algún día
+ * se supera, se DICE (`truncado`) en vez de cortar callado.
+ */
+export const TOPE_TRABAJO_CRM = 5000;
+
+/** Lo publicado que la cola del CRM puede ver: con su acceso de paciente. */
+const PUBLICADO_CON_ACCESO = { estado: 'PUBLICADO', acceso: { isNot: null } } satisfies Prisma.InformeWhereInput;
+
+/**
+ * Prisma traduce `contains` a `LIKE '%…%'` SIN escapar lo tecleado: buscar `%`
+ * devolvía todo, y `_` casa con cualquier letra. Mismo fallo —y mismo arreglo—
+ * que en el CRM (`common/dto/busqueda.ts`). La barra se escapa primero.
+ */
+export function escaparComodinesLike(termino: string): string {
+  return termino.replace(/[\\%_]/g, caracter => `\\${caracter}`);
+}
+
+/** Nombre, PAC o CI: lo que la asistente teclea para encontrar a alguien. */
+function coincideCon(buscar: string): Prisma.InformeWhereInput {
+  const contiene = { contains: escaparComodinesLike(buscar), mode: 'insensitive' } as const;
+  return { paciente: { OR: [{ nombre: contiene }, { pac: contiene }, { ci: contiene }] } };
+}
+
+/** Enlace que sirve hoy (`true`) o que venció o se revocó (`false`). */
+function segunVigencia(vigente: boolean, ahora: Date): Prisma.AccesoPacienteWhereInput {
+  return vigente
+    ? { revocadoEn: null, expiraEn: { gt: ahora } }
+    : { OR: [{ revocadoEn: { not: null } }, { expiraEn: { lte: ahora } }] };
+}
+
 const summary = { id: true, revision: true, estudio: true, fechaEstudio: true, estado: true, archivoId: true, publicadoEn: true, paciente: { select: { id: true, nombre: true } } } satisfies Prisma.InformeSelect;
 
 @Injectable()
@@ -23,7 +56,7 @@ export class Results {
   async list(dto: ListarDto, actor: Actor) {
     const buscar = dto.buscar?.trim();
     const where: Prisma.InformeWhereInput = { ...scope(actor), estado: dto.estado, pacienteId: dto.pacienteId,
-      ...(buscar ? { OR: [{ paciente: { nombre: { contains: buscar, mode: 'insensitive' } } }, { estudio: { contains: buscar, mode: 'insensitive' } }] } : {}) };
+      ...(buscar ? { OR: [{ paciente: { nombre: { contains: escaparComodinesLike(buscar), mode: 'insensitive' } } }, { estudio: { contains: escaparComodinesLike(buscar), mode: 'insensitive' } }] } : {}) };
     const [datos, total] = await this.db.$transaction([
       this.db.informe.findMany({ where, select: summary, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (dto.pagina - 1) * dto.limite, take: dto.limite }),
       this.db.informe.count({ where }),
@@ -47,7 +80,18 @@ export class Results {
    * mande a un paciente a una puerta cerrada.
    */
   async publishedForCrm(dto: InformesCrmDto) {
-    const where: Prisma.InformeWhereInput = { estado: 'PUBLICADO', acceso: { isNot: null }, ...(dto.informeId ? { id: dto.informeId } : {}) };
+    const ahora = new Date();
+    const acceso: Prisma.AccesoPacienteWhereInput = {
+      ...(dto.abierto === undefined ? {} : { abiertoEn: dto.abierto ? { not: null } : null }),
+      ...(dto.vigente === undefined ? {} : segunVigencia(dto.vigente, ahora)),
+    };
+    const where: Prisma.InformeWhereInput = {
+      ...PUBLICADO_CON_ACCESO,
+      ...(Object.keys(acceso).length ? { acceso: { is: acceso } } : {}),
+      ...(dto.informeId ? { id: dto.informeId } : {}),
+      ...(dto.ids ? { id: { in: dto.ids } } : {}),
+      ...(dto.buscar ? coincideCon(dto.buscar) : {}),
+    };
     const [filas, total] = await this.db.$transaction([
       this.db.informe.findMany({
         where,
@@ -59,9 +103,11 @@ export class Results {
       }),
       this.db.informe.count({ where }),
     ]);
-    const ahora = new Date();
+    /* Con `ids` se devuelven en el orden pedido: es la página que ya ordenó el CRM. */
+    const orden = dto.ids ? new Map(dto.ids.map((id, i) => [id, i])) : null;
+    const enOrden = orden ? [...filas].sort((a, b) => orden.get(a.id)! - orden.get(b.id)!) : filas;
     return {
-      datos: filas.map(fila => ({
+      datos: enOrden.map(fila => ({
         informeId: fila.id,
         paciente: fila.paciente,
         estudio: fila.estudio,
@@ -75,6 +121,46 @@ export class Results {
       total, pagina: dto.pagina, limite: dto.limite, totalPaginas: Math.ceil(total / dto.limite),
     };
   }
+  /**
+   * Lo que la cola del CRM necesita para sus pestañas, en una sola lectura.
+   *
+   * Los totales que el portal puede contar solo (todos, abiertos, vencidos sin
+   * abrir) y, ENTERO, el conjunto de trabajo: los ids vigentes y sin abrir,
+   * ordenados como la cola. «Por avisar» y «esperando lectura» son ese conjunto
+   * partido por algo que solo sabe el CRM —si ya se avisó—, así que el CRM
+   * los pagina sobre esta lista exacta en vez de filtrar una página ya cortada.
+   *
+   * `buscar` no cambia los totales —un contador que se mueve mientras escribes
+   * no sirve para decidir—: solo marca en `coinciden` qué ids del conjunto
+   * responden a la búsqueda.
+   */
+  async panoramaForCrm(dto: PanoramaCrmDto) {
+    const ahora = new Date();
+    const trabajo: Prisma.InformeWhereInput = {
+      ...PUBLICADO_CON_ACCESO,
+      acceso: { is: { abiertoEn: null, ...segunVigencia(true, ahora) } },
+    };
+    const orden = [{ publicadoEn: 'desc' }, { id: 'desc' }] satisfies Prisma.InformeOrderByWithRelationInput[];
+    const [todos, abiertos, vencidosSinAbrir, vigentes] = await this.db.$transaction([
+      this.db.informe.count({ where: PUBLICADO_CON_ACCESO }),
+      this.db.informe.count({ where: { ...PUBLICADO_CON_ACCESO, acceso: { is: { abiertoEn: { not: null } } } } }),
+      this.db.informe.count({ where: { ...PUBLICADO_CON_ACCESO, acceso: { is: { abiertoEn: null, ...segunVigencia(false, ahora) } } } }),
+      this.db.informe.findMany({ where: trabajo, select: { id: true }, orderBy: orden, take: TOPE_TRABAJO_CRM + 1 }),
+    ]);
+    /* Aparte: sin búsqueda no hay nada que marcar. El CRM lo cruza con el
+       conjunto de arriba, así que un informe que cambió entre las dos lecturas
+       no aparece donde no toca. */
+    const coinciden = dto.buscar
+      ? await this.db.informe.findMany({ where: { ...trabajo, ...coincideCon(dto.buscar) }, select: { id: true }, orderBy: orden, take: TOPE_TRABAJO_CRM })
+      : null;
+    return {
+      totales: { todos, abiertos, vencidosSinAbrir },
+      vigentesSinAbrir: vigentes.slice(0, TOPE_TRABAJO_CRM).map(informe => informe.id),
+      truncado: vigentes.length > TOPE_TRABAJO_CRM,
+      ...(coinciden ? { coinciden: coinciden.map(informe => informe.id) } : {}),
+    };
+  }
+
   /**
    * El enlace para que la clínica compruebe QUÉ va a enviar antes de
    * enviarlo: la vista del portal con el PDF, como la ve el médico.

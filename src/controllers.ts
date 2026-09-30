@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth';
 import { equalSecret } from './auth/crypto';
 import { Database } from './database';
-import { BuscarPacienteDto, CrearInformeDto, FileMakerInformeDto, InformesCrmDto, ListarDto, LoginDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
+import { BuscarPacienteDto, CrearInformeDto, FileMakerInformeDto, InformesCrmDto, ListarDto, LoginDto, PanoramaCrmDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
 import { MAX_PDF_BYTES } from './files/files';
 import { Patients } from './results/patients';
@@ -102,6 +102,15 @@ export class CrmIntegrationController {
     this.authorize(req);
     await this.attempts.consume('crm-informes', 'consumer', 60, 60);
     return this.results.publishedForCrm(dto);
+  }
+  /**
+   * Totales y conjunto de trabajo de la cola, para las pestañas del CRM. Ver
+   * `Results.panoramaForCrm`. Cupo propio: la cola lo pide en cada recarga.
+   */
+  @Get('informes/panorama') async panorama(@Query() dto: PanoramaCrmDto, @Req() req: Request) {
+    this.authorize(req);
+    await this.attempts.consume('crm-panorama', 'consumer', 60, 60);
+    return this.results.panoramaForCrm(dto);
   }
   /**
    * El enlace para que la asistente vea qué informe va a enviar, en el visor
