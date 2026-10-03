@@ -42,17 +42,34 @@ Content-Type: multipart/form-data
 Respuesta `201`:
 
 ```json
-{ "informeId": "…", "estado": "BORRADOR", "repetido": false,
+{ "informeId": "…", "estado": "BORRADOR", "repetido": false, "actualizado": false,
   "paciente": { "id": "…", "nombre": "…", "ci": null, "pac": "PAC33009" },
   "estudio": "Ecografía abdominal", "fechaEstudio": "2026-09-28T00:00:00.000Z",
   "archivo": { "paginas": 6, "bytes": 7223104 },
   "acceso": { "id": "…", "url": "https://…/resultados/…", "expiraEn": "…" } }
 ```
 
-**`referencia` hace la llamada idempotente.** Sin ella, pulsar el botón dos
-veces deja dos informes del mismo estudio. Con ella, la segunda llamada
-devuelve el primero y responde `repetido: true`. Lo garantiza un índice único,
-no una comprobación previa: dos pulsaciones a la vez también quedan en uno.
+**`referencia` identifica una ecografía concreta y debe mantenerse fija.** Sin
+ella, cada envío crea otro informe. Con ella, el primer envío crea el informe;
+los siguientes sustituyen su PDF si el contenido cambió y devuelven
+`repetido: true, actualizado: true`. Si es exactamente el mismo archivo,
+`actualizado: false` y no se añade una versión. Dos pulsaciones simultáneas
+se procesan en orden y dejan un solo informe.
+
+El reemplazo conserva el informe, su fila en el CRM y el enlace del paciente,
+con su vencimiento y revocación originales. Guarda el archivo anterior para
+el historial y regenera la vista liviana. No envía un WhatsApp. Un enlace ya
+vencido o revocado sigue necesitando la renovación habitual.
+
+El PAC/CI enviado, médico, fecha y nombre de estudio (si se envía) deben
+coincidir con el informe existente; si no, se rechaza con `409`. Un informe
+retirado tampoco se reemplaza. `publicar=true` permite publicar un borrador
+existente; omitirlo no retira uno que ya estaba publicado.
+
+No hace falta cambiar los guiones actuales que ya envían una referencia
+estable, por ejemplo `FM-Ecografia-` seguido del ID del registro. La sustitución
+ocurre al enviar el PDF al portal; generar únicamente un archivo local no
+realiza un envío.
 
 Errores: el mensaje siempre está en `error.mensaje`. `401` credencial, `404`
 médico inexistente o inactivo, `400` PDF inválido, identificador ausente o

@@ -344,10 +344,10 @@ async function desdeFileMaker(campos: Record<string, string>, token = 'f'.repeat
   for (const [clave, valor] of Object.entries(campos)) form.set(clave, valor);
   if (archivo) form.set('archivo', new Blob([new Uint8Array(archivo)], { type: 'application/pdf' }), 'informe.pdf');
   const response = await fetch(`${base}/v1/integraciones/filemaker/informe`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
-  return { status: response.status, data: await response.json() as Record<string, never> & { informeId: string; estado: string; repetido: boolean; paciente: { id: string; nombre: string; pac: string | null }; archivo: { paginas: number } | null; acceso: { id: string; url: string } | null } };
+  return { status: response.status, data: await response.json() as Record<string, never> & { informeId: string; estado: string; repetido: boolean; actualizado: boolean; paciente: { id: string; nombre: string; pac: string | null }; archivo: { paginas: number } | null; acceso: { id: string; url: string } | null } };
 }
 
-const camposFileMaker = (extra: Record<string, string>) => ({
+const camposFileMaker = (extra: Record<string, string>): Record<string, string> => ({
   medico: 'medico@prueba.test', nombre: 'Paciente de FileMaker',
   estudio: 'Ecografía abdominal', fechaEstudio: '2026-01-05', ...extra,
 });
@@ -412,6 +412,107 @@ test('FileMaker: la misma referencia devuelve el informe anterior', async () => 
   const aLaVez = await Promise.all([desdeFileMaker(campos), desdeFileMaker(campos)]);
   for (const r of aLaVez) assert.equal(r.data.informeId, primero.data.informeId);
   assert.equal(await db.informe.count({ where: { referenciaExterna: referencia } }), 1);
+});
+
+test('FileMaker: reemplaza el PDF publicado conservando enlaces, acceso e historial', async () => {
+  const campos = camposFileMaker({ pac: `PAC-UP-${randomUUID().slice(0, 8)}`, referencia: `FM-${randomUUID()}`, publicar: 'true' });
+  const primero = await desdeFileMaker(campos);
+  assert.equal(primero.status, 201);
+  const id = primero.data.informeId;
+  const anterior = await db.informe.findUniqueOrThrow({ where: { id }, include: { acceso: true } });
+  const enlace = await enlaceRevision(id);
+  const sesion = await patientLogin(primero.data.acceso!);
+  // Simula una vista liviana anterior y un enlace ya abierto.
+  await db.informe.update({ where: { id }, data: { archivoVistaId: anterior.archivoId } });
+  const abiertoEn = new Date('2026-01-06T12:00:00Z');
+  await db.accesoPaciente.update({ where: { informeId: id }, data: { abiertoEn } });
+  const document = await PDFDocument.create(); document.addPage(); document.addPage();
+  const nuevoPdf = Buffer.from(await document.save());
+  const actualizado = await desdeFileMaker(campos, undefined, nuevoPdf);
+  assert.equal(actualizado.status, 201);
+  assert.equal(actualizado.data.informeId, id);
+  assert.equal(actualizado.data.estado, 'PUBLICADO');
+  assert.equal(actualizado.data.repetido, true);
+  assert.equal(actualizado.data.actualizado, true);
+  assert.deepEqual(actualizado.data.acceso, primero.data.acceso);
+  const despues = await db.informe.findUniqueOrThrow({ where: { id }, include: { acceso: true, archivos: true } });
+  assert.equal(despues.revision, anterior.revision + 1);
+  assert.notEqual(despues.archivoId, anterior.archivoId);
+  assert.equal(despues.archivoVistaId, null, 'la vista anterior no debe seguir apareciendo');
+  assert.equal(despues.archivos.length, 2, 'conserva el PDF anterior');
+  assert.deepEqual(despues.publicadoEn, anterior.publicadoEn);
+  assert.deepEqual(despues.acceso?.abiertoEn, abiertoEn);
+  assert.deepEqual(despues.acceso?.expiraEn, anterior.acceso?.expiraEn);
+  assert.equal(await db.auditoria.count({ where: { informeId: id, accion: 'PDF_REEMPLAZADO_FILEMAKER' } }), 1);
+  const pacientePdf = await fetch(`${base}/v1/portal/informe/pdf`, { headers: { Authorization: `Bearer ${sesion.data.token}` } });
+  assert.equal(pacientePdf.status, 200);
+  assert.deepEqual(Buffer.from(await pacientePdf.arrayBuffer()), nuevoPdf);
+  const revisionPdf = await pdfDeRevision(enlace.data.url);
+  assert.equal(revisionPdf.status, 200);
+  assert.deepEqual(Buffer.from(await revisionPdf.arrayBuffer()), nuevoPdf, 'el enlace de revisión existente sirve el PDF nuevo');
+  const cola = await api<{ total: number }>(`/v1/integraciones/crm/informes?informeId=${id}`, 'GET', undefined, 'c'.repeat(40));
+  assert.equal(cola.data.total, 1);
+  const repetido = await desdeFileMaker(campos, undefined, nuevoPdf);
+  assert.equal(repetido.status, 201);
+  assert.equal(repetido.data.actualizado, false);
+  assert.equal((await db.informe.findUniqueOrThrow({ where: { id } })).revision, despues.revision);
+  assert.equal(await db.archivo.count({ where: { informeId: id } }), 2);
+});
+
+test('FileMaker: PDF inválido, referencia ajena y retiro no alteran el archivo anterior', async () => {
+  const campos = camposFileMaker({ pac: `PAC-SAFE-${randomUUID().slice(0, 8)}`, referencia: `FM-${randomUUID()}`, publicar: 'true' });
+  const primero = await desdeFileMaker(campos);
+  const id = primero.data.informeId;
+  const anterior = await db.informe.findUniqueOrThrow({ where: { id } });
+  assert.equal((await desdeFileMaker(campos, undefined, Buffer.from('PDF inválido'))).status, 400);
+  const ajenos: Record<string, string>[] = [{ pac: 'PAC-OTRO' }, { fechaEstudio: '2026-01-04' }, { estudio: 'Otra ecografía' }, { medico: 'admin@prueba.test' }, { ci: 'OTRO-CI' }];
+  for (const otro of ajenos) {
+    assert.equal((await desdeFileMaker({ ...campos, ...otro })).status, 409);
+  }
+  assert.deepEqual(await db.informe.findUniqueOrThrow({ where: { id } }), anterior);
+  assert.equal(await db.archivo.count({ where: { informeId: id } }), 1);
+  assert.equal((await api(`/v1/informes/${id}/retirar`, 'POST', { revision: anterior.revision, motivo: 'Retiro de prueba' }, medico)).status, 200);
+  const retirado = await db.informe.findUniqueOrThrow({ where: { id } });
+  assert.equal((await desdeFileMaker(campos)).status, 409);
+  assert.deepEqual(await db.informe.findUniqueOrThrow({ where: { id } }), retirado);
+});
+
+test('FileMaker: dos primeros envíos y dos reemplazos simultáneos dejan un solo informe', async () => {
+  const campos = camposFileMaker({ pac: `PAC-RACE-${randomUUID().slice(0, 8)}`, referencia: `FM-${randomUUID()}` });
+  const iniciales = await Promise.all([desdeFileMaker(campos), desdeFileMaker(campos)]);
+  for (const r of iniciales) assert.equal(r.status, 201);
+  const id = iniciales[0]!.data.informeId;
+  assert.equal(iniciales[1]!.data.informeId, id);
+  assert.equal(iniciales.filter(r => !r.data.repetido).length, 1);
+  const document = await PDFDocument.create(); document.addPage(); document.addPage();
+  const nuevoPdf = Buffer.from(await document.save());
+  const cambios = await Promise.all([desdeFileMaker(campos, undefined, nuevoPdf), desdeFileMaker(campos, undefined, nuevoPdf)]);
+  for (const r of cambios) { assert.equal(r.status, 201); assert.equal(r.data.informeId, id); }
+  assert.equal(cambios.filter(r => r.data.actualizado).length, 1);
+  assert.equal(await db.informe.count({ where: { referenciaExterna: campos.referencia } }), 1);
+  assert.equal(await db.archivo.count({ where: { informeId: id } }), 2);
+});
+
+test('FileMaker: reemplazar no renueva ni reactiva el enlace del paciente', async () => {
+  const campos = camposFileMaker({ pac: `PAC-EXP-${randomUUID().slice(0, 8)}`, referencia: `FM-${randomUUID()}`, publicar: 'true' });
+  const primero = await desdeFileMaker(campos);
+  const id = primero.data.informeId;
+  const expiraEn = new Date('2025-01-01'); const revocadoEn = new Date('2025-01-02');
+  await db.accesoPaciente.update({ where: { informeId: id }, data: { expiraEn, revocadoEn } });
+  const document = await PDFDocument.create(); document.addPage(); document.setTitle('Corrección');
+  assert.equal((await desdeFileMaker(campos, undefined, Buffer.from(await document.save()))).status, 201);
+  const acceso = await db.accesoPaciente.findUniqueOrThrow({ where: { informeId: id } });
+  assert.deepEqual(acceso.expiraEn, expiraEn); assert.deepEqual(acceso.revocadoEn, revocadoEn);
+});
+
+test('FileMaker: publicar un borrador con el mismo PDF conserva archivo y acceso', async () => {
+  const campos = camposFileMaker({ pac: `PAC-DRAFT-${randomUUID().slice(0, 8)}`, referencia: `FM-${randomUUID()}` });
+  const primero = await desdeFileMaker(campos);
+  const publicado = await desdeFileMaker({ ...campos, publicar: 'true' });
+  assert.equal(publicado.status, 201); assert.equal(publicado.data.estado, 'PUBLICADO');
+  assert.equal(publicado.data.informeId, primero.data.informeId);
+  assert.deepEqual(publicado.data.acceso, primero.data.acceso);
+  assert.equal(await db.archivo.count({ where: { informeId: primero.data.informeId } }), 1);
 });
 
 test('FileMaker: un PDF rechazado no deja borradores huérfanos', async () => {

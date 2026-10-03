@@ -30,18 +30,7 @@ export class FileMakerGuard implements CanActivate {
   }
 }
 
-/**
- * Entrada desde FileMaker: una sola llamada deja el informe listo para que el
- * médico lo revise y publique.
- *
- * **Deja el informe en BORRADOR a propósito.** Publicar exige confirmar que el
- * PDF corresponde a ese paciente, y eso no lo puede afirmar un guion: que
- * FileMaker genere el PDF correcto no es lo mismo que comprobar que se adjuntó
- * a la ficha correcta, y publicar no tiene vuelta atrás —el enlace del paciente
- * queda vivo al instante—. El médico abre el portal, ve el informe ya montado
- * y publica de un clic.
- */
-/** `Informe.tipo` ya nace como ECOGRAFIA; el nombre visible sigue ese criterio. */
+/** FileMaker crea el informe o sustituye su PDF por la misma referencia. */
 const ESTUDIO_POR_DEFECTO = 'Ecografía';
 
 @Injectable()
@@ -54,13 +43,7 @@ export class FileMakerIntake {
   ) {}
 
   async recibir(dto: FileMakerInformeDto, buffer: Buffer) {
-    /* 1. Idempotencia: el mismo registro de FileMaker devuelve su informe. */
-    if (dto.referencia) {
-      const previo = await this.db.informe.findUnique({ where: { referenciaExterna: dto.referencia }, select: this.seleccion });
-      if (previo) return this.respuesta(previo, true);
-    }
-
-    /* 2. El informe es de un médico concreto: es quien lo verá en su portal.
+    /* El informe es de un médico concreto: es quien lo verá en su portal.
        FileMaker puede no tener ese dato a mano, así que se admite uno por
        defecto del servidor — con el coste de que todos caigan en esa cuenta. */
     const correo = (dto.medico ?? process.env.FILEMAKER_MEDICO_POR_DEFECTO ?? '').trim().toLowerCase();
@@ -70,18 +53,61 @@ export class FileMakerIntake {
 
     const fecha = fechaDeEstudio(dto.fechaEstudio);
 
-    /* 3. El PDF se valida y se analiza ANTES de crear nada: un archivo
+    /* El PDF se valida y se analiza ANTES de crear nada: un archivo
        rechazado no debe dejar un borrador huérfano en el portal. */
     const [validacion, antivirus] = await Promise.allSettled([validatePdf(buffer), this.scanner.scan(buffer)]);
     if (validacion.status === 'rejected') throw validacion.reason;
     if (antivirus.status === 'rejected') throw antivirus.reason;
 
-    const paciente = await this.pacienteDe(dto, medico.id);
+    const pac = normalizeId(dto.pac);
+    const ci = normalizeId(dto.ci);
+    if (!pac && !ci) problem(400, 'IDENTIFICADOR_REQUERIDO', 'Manda el PAC o el CI del paciente.');
 
     const clave = `${randomUUID()}.pdf`;
     await this.files.put(clave, buffer);
+    let conservarArchivo = false;
     try {
-      const informe = await this.db.$transaction(async tx => {
+      const resultado = await this.db.$transaction(async tx => {
+        // Serializa también el primer envío: dos pulsaciones no crean duplicados.
+        if (dto.referencia) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'filemaker:informe:' + dto.referencia}, 0))`;
+          const previo = await tx.informe.findUnique({
+            where: { referenciaExterna: dto.referencia },
+            include: { paciente: true, archivo: true },
+          });
+          if (previo) {
+            if ((pac && pac !== previo.paciente.pac) || (ci && ci !== previo.paciente.ci)
+              || previo.medicoId !== medico.id || previo.fechaEstudio.getTime() !== fecha.getTime()
+              || (dto.estudio && dto.estudio.trim() !== previo.estudio)) {
+              problem(409, 'REFERENCIA_OTRO_ESTUDIO', 'Esta referencia pertenece a otro paciente o estudio. Revisa el PAC, la fecha y la referencia en FileMaker.');
+            }
+            if (previo.estado === 'RETIRADO') problem(409, 'INFORME_RETIRADO', 'El informe está retirado y no se puede reemplazar desde FileMaker.');
+            const actualizado = previo.archivo?.sha256 !== validacion.value.sha256;
+            const publicar = dto.publicar && previo.estado === 'BORRADOR';
+            if (actualizado || publicar) {
+              const archivo = actualizado
+                ? await tx.archivo.create({ data: { informeId: previo.id, clave, bytes: buffer.length, ...validacion.value } })
+                : null;
+              const cambio = await tx.informe.updateMany({
+                where: { id: previo.id, revision: previo.revision, estado: previo.estado },
+                data: {
+                  ...(archivo ? { archivoId: archivo.id, archivoVistaId: null } : {}),
+                  ...(publicar ? { estado: 'PUBLICADO' as const, publicadoEn: new Date() } : {}),
+                  revision: { increment: 1 },
+                },
+              });
+              if (!cambio.count) problem(409, 'INFORME_MODIFICADO', 'El informe cambió durante el envío. Revisa su estado y vuelve a intentarlo.');
+              await tx.auditoria.create({ data: {
+                actorId: medico.id, informeId: previo.id,
+                accion: actualizado ? 'PDF_REEMPLAZADO_FILEMAKER' : 'INFORME_DESDE_FILEMAKER_PUBLICADO',
+              } });
+            }
+            // Conserva acceso, caducidad, sesiones e historial de archivos.
+            const informe = await tx.informe.findUniqueOrThrow({ where: { id: previo.id }, select: this.seleccion });
+            return { informe, repetido: true, actualizado, conservarArchivo: actualizado };
+          }
+        }
+        const paciente = await this.pacienteDe(tx, dto, medico.id);
         const creado = await tx.informe.create({
           data: { pacienteId: paciente.id, medicoId: medico.id, estudio: dto.estudio?.trim() || ESTUDIO_POR_DEFECTO, fechaEstudio: fecha, referenciaExterna: dto.referencia ?? null },
         });
@@ -95,43 +121,30 @@ export class FileMakerIntake {
         });
         await tx.accesoPaciente.create({ data: { informeId: creado.id, expiraEn: vencimiento() } });
         await tx.auditoria.create({ data: { actorId: medico.id, accion: dto.publicar ? 'INFORME_DESDE_FILEMAKER_PUBLICADO' : 'INFORME_DESDE_FILEMAKER', informeId: creado.id } });
-        return tx.informe.findUniqueOrThrow({ where: { id: creado.id }, select: this.seleccion });
+        const informe = await tx.informe.findUniqueOrThrow({ where: { id: creado.id }, select: this.seleccion });
+        return { informe, repetido: false, actualizado: false, conservarArchivo: true };
       });
-      return this.respuesta(informe, false);
-    } catch (error) {
-      await this.files.delete(clave).catch(() => process.stderr.write(JSON.stringify({ evento: 'archivo_huerfano', clave }) + '\n'));
-      throw error;
+      conservarArchivo = resultado.conservarArchivo;
+      return this.respuesta(resultado.informe, resultado.repetido, resultado.actualizado);
+    } finally {
+      if (!conservarArchivo) await this.files.delete(clave).catch(() => process.stderr.write(JSON.stringify({ evento: 'archivo_huerfano', clave }) + '\n'));
     }
   }
 
-  /**
-   * Busca al paciente por sus identificadores y, si no está, lo registra.
-   *
-   * `create` y luego releer ante un choque del índice único, en vez de
-   * comprobar antes: entre el SELECT y el INSERT cabe otra llamada, y bajo dos
-   * botones pulsados a la vez uno de los dos chocaría igual.
-   */
-  private async pacienteDe(dto: FileMakerInformeDto, actorId: string) {
+  /** Resuelve al paciente dentro de la misma transacción que su informe. */
+  private async pacienteDe(tx: Prisma.TransactionClient, dto: FileMakerInformeDto, actorId: string) {
     const pac = normalizeId(dto.pac);
     const ci = normalizeId(dto.ci);
-    if (!pac && !ci) problem(400, 'IDENTIFICADOR_REQUERIDO', 'Manda el PAC o el CI del paciente.');
-    const buscar = { OR: [...(pac ? [{ pac }] : []), ...(ci ? [{ ci }] : [])] };
-
-    const encontrado = await this.db.paciente.findFirst({ where: buscar });
-    if (encontrado) return encontrado;
-    try {
-      return await this.db.$transaction(async tx => {
-        const nuevo = await tx.paciente.create({ data: { nombre: dto.nombre.trim(), pac, ci } });
-        await tx.auditoria.create({ data: { actorId, accion: 'PACIENTE_REGISTRADO' } });
-        return nuevo;
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const yaCreado = await this.db.paciente.findFirst({ where: buscar });
-        if (yaCreado) return yaCreado;
-      }
-      throw error;
+    // Orden fijo: distintos estudios del mismo paciente pueden llegar juntos.
+    for (const identificador of [pac && `filemaker:pac:${pac}`, ci && `filemaker:ci:${ci}`].filter(Boolean).sort()) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identificador}, 0))`;
     }
+    const buscar = { OR: [...(pac ? [{ pac }] : []), ...(ci ? [{ ci }] : [])] };
+    const encontrado = await tx.paciente.findFirst({ where: buscar });
+    if (encontrado) return encontrado;
+    const nuevo = await tx.paciente.create({ data: { nombre: dto.nombre.trim(), pac, ci } });
+    await tx.auditoria.create({ data: { actorId, accion: 'PACIENTE_REGISTRADO' } });
+    return nuevo;
   }
 
   private readonly seleccion = {
@@ -141,12 +154,13 @@ export class FileMakerIntake {
     archivo: { select: { paginas: true, bytes: true } },
   } satisfies Prisma.InformeSelect;
 
-  private respuesta(informe: Prisma.InformeGetPayload<{ select: FileMakerIntake['seleccion'] }>, repetido: boolean) {
+  private respuesta(informe: Prisma.InformeGetPayload<{ select: FileMakerIntake['seleccion'] }>, repetido: boolean, actualizado: boolean) {
     return {
       informeId: informe.id,
       estado: informe.estado,
-      /** `true` = esta referencia ya se había cargado; no se creó nada nuevo. */
+      /** `true` = se reutilizó el mismo informe y enlace. */
       repetido,
+      actualizado,
       paciente: informe.paciente,
       estudio: informe.estudio,
       fechaEstudio: informe.fechaEstudio,
