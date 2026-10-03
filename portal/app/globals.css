@@ -576,6 +576,62 @@ dialog p {
   }
 }
 
+/* --- Videos e imágenes del informe (portal del médico) --- */
+.medios-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 8px 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.medio {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.medio[aria-busy="true"] {
+  opacity: 0.6;
+}
+.medio-vista {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #0b1513;
+  border-radius: 2px;
+}
+img.medio-vista {
+  background: var(--wash);
+}
+.medio-datos {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.medio-datos strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.medio-datos small {
+  color: var(--muted);
+}
+.medio-confirmar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.medio-confirmar span {
+  flex-basis: 100%;
+}
+
 /* ── Página del paciente ────────────────────────────────────────────────
    El estilo del CRM: Poppins, su paleta cerrada, tarjetas de 16 px, botón en
    píldora y sombras sutiles. Los tokens viven en `.pac` para no tocar el
@@ -794,6 +850,97 @@ dialog p {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--pac-tenue);
+}
+
+/* Videos e imágenes del estudio: cada uno en su tarjeta, para verlo,
+   guardarlo o compartirlo sin salir de la página. */
+.pac-medios {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: pac-entra 0.4s 0.04s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pac-medios-titulo {
+  margin: 6px 4px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--pac-texto);
+}
+.pac-medio {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+  border: 1px solid var(--pac-borde);
+  border-radius: 16px;
+  box-shadow: var(--pac-sombra);
+}
+.pac-medio-vista {
+  display: block;
+  width: 100%;
+  max-height: 70dvh;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #0b1513;
+}
+img.pac-medio-vista {
+  aspect-ratio: auto;
+  background: var(--pac-fondo);
+}
+.pac-medio-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.pac-medio-dato {
+  font-size: 12px;
+  color: var(--pac-tenue);
+}
+.pac-medio-acciones {
+  display: flex;
+  gap: 8px;
+}
+.pac-boton-sec {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--pac-borde);
+  border-radius: 999px;
+  background: white;
+  color: var(--pac-primario);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.pac-boton-sec:hover {
+  background: var(--pac-claro);
+  border-color: var(--pac-secundario);
+  color: var(--pac-primario);
+}
+.pac-boton-sec:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.pac-boton-sec-lleno,
+.pac-boton-sec-lleno:hover {
+  background: var(--pac-primario);
+  border-color: var(--pac-primario);
+  color: white;
+}
+.pac-medio-error {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: 12px;
+  color: #902b27;
 }
 
 /* Mientras abre: la silueta de la tarjeta, sin textos que cambian. */

@@ -11,6 +11,7 @@ import { Results } from './results/results';
 import { FileMakerGuard, FileMakerIntake } from './results/filemaker';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
+import { Adjuntos } from './results/adjuntos';
 import { Mantenimiento } from './mantenimiento/mantenimiento';
 import { VistasLivianas } from './results/vistas';
 import { AuthController, CrmIntegrationController, FileMakerController, HealthController, PatientsController, PortalController, ResultsController, RevisionController } from './controllers';
@@ -21,7 +22,7 @@ import { ApiErrors } from './errors';
   providers: [
     { provide: CONFIG, useFactory: readConfig }, Database, Attempts, AuthService,
     { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner,
-    Patients, Results, PatientPortal, Mantenimiento, VistasLivianas, FileMakerIntake, FileMakerGuard,
+    Patients, Results, Adjuntos, PatientPortal, Mantenimiento, VistasLivianas, FileMakerIntake, FileMakerGuard,
   ],
 })
 export class AppModule {}

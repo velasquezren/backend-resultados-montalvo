@@ -23,7 +23,7 @@ export class ApiErrors implements ExceptionFilter {
         codigo = String(data.codigo); mensaje = String(data.mensaje);
       } else {
         codigo = status === 413 ? 'ARCHIVO_DEMASIADO_GRANDE' : 'DATOS_INVALIDOS';
-        mensaje = status === 413 ? 'El PDF supera 10 MB. Reduce su tamaño e intenta otra vez.' : 'Revisa los datos indicados e intenta de nuevo.';
+        mensaje = status === 413 ? 'El archivo supera el tamaño permitido: hasta 10 MB el PDF y 100 MB cada video o imagen.' : 'Revisa los datos indicados e intenta de nuevo.';
         if (typeof data === 'object' && 'message' in data && Array.isArray(data.message)) campos = data.message.filter((v): v is string => typeof v === 'string');
       }
     } else if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(error.code)) {

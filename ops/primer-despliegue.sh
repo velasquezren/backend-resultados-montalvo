@@ -116,6 +116,10 @@ cat > /etc/apache2/sites-available/resultados-ssl.conf <<VHOST
  ProxyPassReverse / http://127.0.0.1:3011/
  ProxyTimeout 100
  LimitRequestBody 11534336
+ # Videos e imágenes del informe: hasta 100 MB cada uno (más el sobre multipart).
+ <LocationMatch "^/api/v1/informes/[^/]+/adjuntos$">
+  LimitRequestBody 110100480
+ </LocationMatch>
  Header always set Strict-Transport-Security "max-age=31536000"
  ErrorLog \${APACHE_LOG_DIR}/resultados_error.log
  # No registrar URLs de acceso, códigos, cookies ni cuerpos clínicos.

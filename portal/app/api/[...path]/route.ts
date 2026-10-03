@@ -1,12 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isIP } from "node:net";
-import { allowed, sameOrigin } from "@/lib/proxy-policy";
+import {
+  allowed,
+  esSubidaDeAdjunto,
+  LIMITE_SUBIDA_ADJUNTO,
+  sameOrigin,
+} from "@/lib/proxy-policy";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const noStore = {
   "Cache-Control": "no-store, private",
   "Referrer-Policy": "no-referrer",
 };
+/**
+ * El cuerpo de una subida de adjunto, en flujo y con tope: cuenta los bytes a
+ * medida que pasan y corta al superar el límite. Juntarlo en memoria —como
+ * los PDF de 10 MB— serían 100 MB por subida en este proceso.
+ */
+function cuerpoConTope(cuerpo: ReadableStream<Uint8Array>, limite: number, alExceder: () => void) {
+  let total = 0;
+  return cuerpo.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(trozo, control) {
+        total += trozo.byteLength;
+        if (total > limite) {
+          alExceder();
+          control.error(new Error("El archivo supera el tamaño permitido."));
+        } else control.enqueue(trozo);
+      },
+    }),
+  );
+}
+
+/** Lo que el reproductor de video necesita de vuelta para adelantar y retroceder. */
+const CABECERAS_DE_TRAMO = ["accept-ranges", "content-range"] as const;
+
 function error(status: number, mensaje: string) {
   return NextResponse.json(
     { error: { mensaje } },
@@ -51,6 +79,8 @@ async function handler(
   const multipart =
     request.headers.get("content-type")?.startsWith("multipart/form-data") ??
     false;
+  const subidaAdjunto = multipart && esSubidaDeAdjunto(path, request.method);
+  let excedido = false;
   try {
     const headers: Record<string, string> = {};
     if (token && !login) headers.Authorization = `Bearer ${token}`;
@@ -59,8 +89,16 @@ async function handler(
     // El despliegue debe sobrescribir X-Real-IP y mantener Next en loopback.
     const ip = request.headers.get("x-real-ip");
     if (ip && isIP(ip)) headers["X-Forwarded-For"] = ip;
-    let body: Uint8Array | undefined;
-    if (request.method === "POST") {
+    /* El video se pide por tramos (`Range`): sin reenviarla, el iPhone no lo reproduce. */
+    const rango = request.headers.get("range");
+    if (request.method === "GET" && rango) headers.Range = rango;
+    let body: Uint8Array | ReadableStream<Uint8Array> | undefined;
+    if (subidaAdjunto) {
+      if (Number(request.headers.get("content-length") ?? 0) > LIMITE_SUBIDA_ADJUNTO)
+        return error(413, "Cada video o imagen puede pesar hasta 100 MB.");
+      if (request.body)
+        body = cuerpoConTope(request.body, LIMITE_SUBIDA_ADJUNTO, () => (excedido = true));
+    } else if (request.method === "POST") {
       const limit = multipart ? 11 * 1024 * 1024 : 64 * 1024;
       if (Number(request.headers.get("content-length") ?? 0) > limit)
         return error(413, "El archivo supera el tamaño permitido.");
@@ -85,11 +123,15 @@ async function handler(
       {
         method: request.method,
         headers,
-        body: body ? Buffer.from(body) : undefined,
+        body: body instanceof ReadableStream ? body : body ? Buffer.from(body) : undefined,
+        // Obligatorio en Node para mandar un cuerpo en flujo.
+        ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
         cache: "no-store",
         redirect: "error",
-        signal: AbortSignal.timeout(multipart ? 90000 : 35000),
-      },
+        /* Un video de 100 MB por la conexión de la clínica tarda minutos; el
+           resto de llamadas conserva sus tiempos de siempre. */
+        signal: AbortSignal.timeout(subidaAdjunto ? 15 * 60_000 : multipart ? 90000 : 35000),
+      } as RequestInit,
     );
     if (login) {
       const data = await response.json();
@@ -134,12 +176,19 @@ async function handler(
               )!,
             }
           : {}),
+        ...Object.fromEntries(
+          CABECERAS_DE_TRAMO.flatMap((nombre) => {
+            const valor = response.headers.get(nombre);
+            return valor ? [[nombre, valor]] : [];
+          }),
+        ),
       },
     });
     if (!revision && ((logout && response.ok) || response.status === 401))
       result.cookies.delete(cookieName);
     return result;
   } catch {
+    if (excedido) return error(413, "Cada video o imagen puede pesar hasta 100 MB.");
     return error(
       503,
       "No pudimos confirmar la operación. Revisa el estado antes de repetirla.",

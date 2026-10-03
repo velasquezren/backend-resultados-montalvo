@@ -185,3 +185,137 @@ test('versión liviana: un JPEG pequeño (el logo del encabezado) no se recompri
   pdf.addPage().drawImage(await pdf.embedJpg(logo), { x: 10, y: 10, width: 100, height: 90 });
   assert.equal(await aligerarPdf(Buffer.from(await pdf.save())), null);
 });
+
+/* ── Adjuntos: formato real, tramos y cifrado por trozos ───────────────── */
+import { randomBytes } from 'node:crypto';
+import { mkdtemp, readFile as leerArchivo, writeFile as escribirArchivo } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join as unir } from 'node:path';
+import { HttpException } from '@nestjs/common';
+import { detectarFormato, nombreVisible } from '../src/files/medios';
+import { rangoPedido } from '../src/files/rango';
+import { abrirTramo, sellarArchivo, TROZO } from '../src/files/sellado';
+import { PdfScanner } from '../src/files/files';
+import type { AppConfig } from '../src/config';
+
+const ftyp = (marca: string) => Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftyp' + marca), Buffer.alloc(16)]);
+function codigoDe(fn: () => unknown): string | undefined {
+  try { fn(); } catch (error) { if (error instanceof HttpException) return (error.getResponse() as { codigo: string }).codigo; throw error; }
+  return undefined;
+}
+
+test('el formato sale de los bytes, no del nombre: MP4, MOV, WebM, GIF, JPG, PNG y WebP', () => {
+  assert.equal(detectarFormato(ftyp('isom')).mime, 'video/mp4');
+  assert.equal(detectarFormato(ftyp('mp42')).mime, 'video/mp4');
+  assert.equal(detectarFormato(ftyp('qt  ')).mime, 'video/quicktime');
+  assert.equal(detectarFormato(Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from('....B\x82\x84webm')])).mime, 'video/webm');
+  assert.equal(detectarFormato(Buffer.from('GIF89a......')).tipo, 'IMAGEN');
+  assert.equal(detectarFormato(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0])).mime, 'image/jpeg');
+  assert.equal(detectarFormato(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])).mime, 'image/png');
+  assert.equal(detectarFormato(Buffer.from('RIFF\0\0\0\0WEBPVP8 ')).mime, 'image/webp');
+});
+
+/* Aceptarlos dejaría al paciente frente a un reproductor negro: se dice cómo convertirlos. */
+test('lo que un teléfono no reproduce se rechaza con cómo convertirlo', () => {
+  assert.equal(codigoDe(() => detectarFormato(Buffer.from('RIFF\0\0\0\0AVI LIST'))), 'FORMATO_NO_ADMITIDO');
+  assert.equal(codigoDe(() => detectarFormato(ftyp('heic'))), 'FORMATO_NO_ADMITIDO');
+  assert.equal(codigoDe(() => detectarFormato(ftyp('3gp4'))), 'FORMATO_NO_ADMITIDO');
+  assert.equal(codigoDe(() => detectarFormato(Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from('....matroska')]))), 'FORMATO_NO_ADMITIDO');
+  assert.equal(codigoDe(() => detectarFormato(Buffer.from('%PDF-1.7'))), 'FORMATO_NO_ADMITIDO');
+  assert.equal(codigoDe(() => detectarFormato(Buffer.from('<html>'))), 'FORMATO_NO_ADMITIDO');
+  assert.equal(codigoDe(() => detectarFormato(Buffer.alloc(0))), 'FORMATO_NO_ADMITIDO');
+});
+
+test('el nombre que ve el médico llega sin rutas ni caracteres de control', () => {
+  const mp4 = detectarFormato(ftyp('isom'));
+  assert.equal(nombreVisible('C:\\eco\\bebé 4D.mp4', mp4), 'bebé 4D.mp4');
+  assert.equal(nombreVisible('../../x\u0000.mp4', mp4), 'x.mp4');
+  assert.equal(nombreVisible('', mp4), 'Video.mp4');
+});
+
+test('Range: abierto, cerrado, sufijo, fuera del archivo y varios tramos', () => {
+  assert.equal(rangoPedido(undefined, 100), null);
+  assert.deepEqual(rangoPedido('bytes=0-1', 100), { inicio: 0, fin: 1 });
+  assert.deepEqual(rangoPedido('bytes=90-', 100), { inicio: 90, fin: 99 });
+  assert.deepEqual(rangoPedido('bytes=90-500', 100), { inicio: 90, fin: 99 });
+  assert.deepEqual(rangoPedido('bytes=-10', 100), { inicio: 90, fin: 99 });
+  assert.deepEqual(rangoPedido('bytes=-500', 100), { inicio: 0, fin: 99 });
+  assert.equal(rangoPedido('bytes=100-', 100), 'invalido');
+  assert.equal(rangoPedido('bytes=5-2', 100), 'invalido');
+  assert.equal(rangoPedido('bytes=-0', 100), 'invalido');
+  assert.equal(rangoPedido('bytes=-', 100), 'invalido');
+  assert.equal(rangoPedido('items=0-1', 100), 'invalido');
+  assert.equal(rangoPedido('bytes=0-1,5-9', 100), null);
+});
+
+async function tramo(ruta: string, clave: string, objeto: string, inicio: number, fin: number): Promise<Buffer> {
+  const partes: Buffer[] = [];
+  for await (const parte of abrirTramo(ruta, clave, objeto, inicio, fin)) partes.push(parte);
+  return Buffer.concat(partes);
+}
+
+test('cifrado por trozos: cualquier tramo sale idéntico sin descifrar el archivo entero', async () => {
+  const carpeta = await mkdtemp(unir(tmpdir(), 'sellado-'));
+  const claro = randomBytes(3 * TROZO + 123);
+  const origen = unir(carpeta, 'claro'); const destino = unir(carpeta, 'sellado');
+  await escribirArchivo(origen, claro);
+  const clave = 'cd'.repeat(32);
+  const { sha256, bytes } = await sellarArchivo(origen, destino, clave, 'objeto.mp4');
+  assert.equal(bytes, claro.length);
+  assert.equal(sha256, (await import('node:crypto')).createHash('sha256').update(claro).digest('hex'));
+  assert.equal((await leerArchivo(destino)).includes(claro.subarray(1000, 1064)), false, 'en disco no queda nada en claro');
+  for (const [inicio, fin] of [[0, 1], [0, claro.length - 1], [TROZO - 3, TROZO + 3], [2 * TROZO, 3 * TROZO + 122], [claro.length - 1, claro.length - 1]] as const)
+    assert.deepEqual(await tramo(destino, clave, 'objeto.mp4', inicio, fin), claro.subarray(inicio, fin + 1));
+});
+
+test('cifrado por trozos: un byte cambiado, otra clave de objeto o un archivo cortado no se entregan', async () => {
+  const carpeta = await mkdtemp(unir(tmpdir(), 'sellado-'));
+  const origen = unir(carpeta, 'claro'); const destino = unir(carpeta, 'sellado');
+  await escribirArchivo(origen, randomBytes(2 * TROZO + 10));
+  const clave = 'ef'.repeat(32);
+  await sellarArchivo(origen, destino, clave, 'a.mp4');
+  await assert.rejects(tramo(destino, clave, 'b.mp4', 0, 10), 'otro objeto: el AAD no coincide');
+  const sellado = await leerArchivo(destino);
+  const alterado = Buffer.from(sellado); const posicion = 25 + TROZO + 16 + 5; alterado.writeUInt8(alterado.readUInt8(posicion) ^ 1, posicion);
+  await escribirArchivo(destino, alterado);
+  await assert.rejects(tramo(destino, clave, 'a.mp4', TROZO, TROZO + 20), 'trozo alterado');
+  await escribirArchivo(destino, sellado.subarray(0, sellado.length - 30));
+  await assert.rejects(tramo(destino, clave, 'a.mp4', 2 * TROZO, 2 * TROZO + 9), 'cortado');
+  await assert.rejects(sellarArchivo(origen, destino, clave, 'a.mp4'), 'nunca pisa un archivo existente');
+});
+
+/** Un clamd de mentira que contesta lo que se le pida, para probar las tres salidas. */
+async function clamdFalso(respuesta: string): Promise<{ puerto: number; cerrar: () => void }> {
+  const servidor = createServer(socket => {
+    let recibido = Buffer.alloc(0);
+    socket.on('data', dato => {
+      recibido = Buffer.concat([recibido, dato]);
+      if (recibido.subarray(-4).equals(Buffer.alloc(4))) socket.end(respuesta);
+    });
+  });
+  await new Promise<void>(listo => servidor.listen(0, '127.0.0.1', listo));
+  return { puerto: (servidor.address() as { port: number }).port, cerrar: () => servidor.close() };
+}
+
+test('antivirus de adjuntos: limpio pasa, infectado es 400 y pasarse del límite de clamd es 503, no un virus', async () => {
+  const carpeta = await mkdtemp(unir(tmpdir(), 'clamd-'));
+  const archivo = unir(carpeta, 'video'); await escribirArchivo(archivo, randomBytes(200_000));
+  const escaner = new PdfScanner({ production: true } as AppConfig);
+  const anterior = { host: process.env.CLAMAV_HOST, puerto: process.env.CLAMAV_PORT };
+  const silencio = process.stderr.write; process.stderr.write = () => true;
+  try {
+    for (const [respuesta, esperado] of [['stream: OK\0', undefined], ['stream: Eicar-Signature FOUND\0', 400], ['INSTREAM size limit exceeded. ERROR\0', 503]] as const) {
+      const clamd = await clamdFalso(respuesta);
+      process.env.CLAMAV_HOST = '127.0.0.1'; process.env.CLAMAV_PORT = String(clamd.puerto);
+      try {
+        if (esperado === undefined) await escaner.scanFile(archivo);
+        else await assert.rejects(escaner.scanFile(archivo), (error: HttpException) => error.getStatus() === esperado);
+      } finally { clamd.cerrar(); }
+    }
+  } finally {
+    process.stderr.write = silencio;
+    if (anterior.host === undefined) delete process.env.CLAMAV_HOST; else process.env.CLAMAV_HOST = anterior.host;
+    if (anterior.puerto === undefined) delete process.env.CLAMAV_PORT; else process.env.CLAMAV_PORT = anterior.puerto;
+  }
+});

@@ -3,16 +3,20 @@ import { FormEvent, useRef, useState } from 'react';
 import { api, ApiError, upload as uploadWithProgress } from '@/lib/client';
 import { Access, Report, dateLabel, reportLabels } from '@/lib/types';
 import { Feedback, AccessCard, message } from './shared';
+import ReportMedia from './ReportMedia';
 export default function ReportDetail({
   report,
   initialAccess,
   onChange,
   onBack,
+  limites,
 }: {
   report: Report;
   initialAccess: Access | null;
   onChange: (report: Report) => void;
   onBack: () => void;
+  /** De `GET /v1/informes/configuracion`; con respaldo por si aún no llegó. */
+  limites?: { maxAdjuntoBytes: number; maxAdjuntos: number };
 }) {
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -172,6 +176,12 @@ export default function ReportDetail({
           </a>
         </section>
       )}
+      <ReportMedia
+        report={report}
+        maxBytes={limites?.maxAdjuntoBytes ?? 100 * 1024 * 1024}
+        maxAdjuntos={limites?.maxAdjuntos ?? 6}
+        onChange={onChange}
+      />
       {report.estado === "BORRADOR" && report.archivoId && (
         <form onSubmit={publish} className="section">
           <h2>Antes de publicar</h2>

@@ -28,6 +28,18 @@ Un solo módulo Nest reúne estos servicios para evitar estructura ceremonial. N
 - Publicación y auditoría se guardan en una transacción; dos publicaciones simultáneas dejan una sola.
 - Los instantes se almacenan como UTC; `fechaEstudio` es fecha clínica sin hora y se valida con el calendario de Bolivia. Quien la muestre debe formatearla en UTC, o en Bolivia aparece el día anterior.
 
+## Videos e imágenes del informe
+
+Desde el 2026-10-03 el médico puede sumar al informe videos e imágenes —un clip de la ecografía, un video 4D, un GIF— que el paciente ve en su enlace, guarda y comparte. Viven en su propia tabla (`Adjunto`), no en `Archivo`: acompañan al resultado, no lo reemplazan. Código en `src/results/adjuntos.ts` y `src/files/{medios,sellado,rango}.ts`.
+
+- **También con el informe publicado.** Los 34 informes de producción entraron publicados desde FileMaker: limitarlo al borrador dejaba la función sin uso. Lo inmutable es el resultado (el PDF); un video no cambia lo que dice el informe. Por lo mismo se puede **quitar**: los bytes se borran del almacenamiento en el acto —un video en la ficha equivocada no puede quedarse guardado— y la fila queda marcada (`eliminadoEn`) junto a la auditoría (`ADJUNTO_AGREGADO` / `ADJUNTO_ELIMINADO`). Un informe retirado no admite cambios. El paciente solo los ve con el informe publicado.
+- **Tipo real.** Se decide por los primeros bytes, nunca por lo que diga el navegador, y solo entra lo que un teléfono reproduce sin instalar nada (MP4, MOV, WebM, GIF, JPG, PNG, WebP). AVI, MKV, 3GP y fotos HEIC se rechazan con cómo convertirlos: aceptarlos dejaba al paciente frente a un reproductor negro. No hay transcodificación (el servidor no tiene ffmpeg); un MOV en HEVC de iPhone puede no reproducirse en algunos Android, y para eso está «Guardar».
+- **Límites.** 100 MB por archivo y 6 por informe; el tope se hace cumplir en una transacción con bloqueo de la fila del informe, así dos subidas simultáneas no lo pasan juntas.
+- **Sin cargar el archivo en memoria.** La subida va en flujo por el proxy de Next (con tope), multer la escribe en `PRIVATE_STORAGE_DIR/.subidas`, el antivirus la lee desde disco por trozos y se cifra también por trozos. La temporal se borra al terminar; si un corte la deja, la borra el mantenimiento horario.
+- **Cifrado por trozos (`MNTV2`).** El PDF se cifra en un solo bloque GCM porque se lee entero. Un video se pide por tramos (`Range`) —Safari en el iPhone no reproduce sin 206— y descifrarlo entero para cada tramo serían decenas de veces 100 MB. Cada trozo de 64 KiB lleva su nonce y su etiqueta; el AAD (clave del objeto + cabecera con el tamaño total + número de trozo) impide reordenar, cortar o mezclar trozos. Nunca se entrega un byte sin autenticar.
+- **Compartir manda el archivo, no el enlace.** En el teléfono se usa el menú nativo de compartir (Web Share con archivos), en dos toques: el primero lo prepara y el segundo lo comparte, porque el iPhone solo abre ese menú justo después de un toque y bajar un video tarda más.
+- **Capacidad.** Disco compartido con el CRM (25 GB libres el 2026-10-03). Los videos son lo que más crece; antes de que pesen, las copias diarias necesitan retención (ver [operación](operacion.md#videos-e-imágenes)) y, con volumen, R2.
+
 ## Acceso y privacidad
 
 Contraseñas scrypt; sesiones persistidas como HMAC. Clave HMAC exclusiva del servicio. Sesiones del médico, del paciente y credencial CRM no son intercambiables. Sesión médica de 8 horas; sesión paciente de 15 minutos; código válido 30 días y renovable.
@@ -50,7 +62,7 @@ El CRM lleva él mismo la cuenta de a quién avisó (`AvisoResultado`, con índi
 
 ## Escala y límites explícitos
 
-PDF hasta 10 MB, dos cargas concurrentes por proceso, consultas paginadas. R2 permite agregar instancias de API sin compartir disco. No se introduce Redis para este volumen.
+PDF hasta 10 MB, dos cargas concurrentes por proceso, consultas paginadas. Videos e imágenes hasta 100 MB, en flujo (ver arriba). R2 permite agregar instancias de API sin compartir disco. No se introduce Redis para este volumen.
 
 La validación estructural de PDF ocurre en el proceso API. Antes de subir límites o asumir volúmenes altos, medir memoria, CPU, latencia y considerar mover análisis a un worker de archivos. No se realizaron pruebas de carga ni se garantiza una capacidad numérica.
 

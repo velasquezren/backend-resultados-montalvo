@@ -83,3 +83,15 @@ El proceso API escucha en loopback, con usuario del sistema propio y directorio 
 Endpoint de cambio de contraseña: POST `/v1/auth/password`, cuerpo `{actual,nueva}`; requiere sesión, valida la contraseña actual y revoca todas las sesiones al guardar. Disponible en el portal. El primer administrador recibe una contraseña aleatoria mediante un archivo local protegido, fuera del repositorio.
 
 Las copias del servidor complementan los archivos privados; una copia en el mismo VPS no protege contra la pérdida del VPS. Conservar las claves y una copia externa fuera del servidor antes de acumular informes. El enlace `nip.io` es provisional y debe sustituirse por un subdominio propio cuando esté disponible.
+
+## Videos e imágenes
+
+Lo que la función necesita del servidor (aplicado el 2026-10-03; plantillas en `ops/`):
+
+| Pieza | Ajuste | Por qué |
+| --- | --- | --- |
+| ClamAV (`/etc/clamav/clamd.conf`) | `StreamMaxLength 110M`, `MaxFileSize 110M`, `MaxScanSize 220M` | Con 12M respondía «size limit exceeded» y ningún video podía verificarse. La API lo distingue de un virus: 503 y el evento `clamd_limite_tamano` en el log |
+| Apache (vhost HTTPS) | `<LocationMatch "^/api/v1/informes/[^/]+/adjuntos$"> LimitRequestBody 110100480` | El resto del portal conserva los 11 MB |
+| Proxy de Next | Tope propio de 101 MB y 15 minutos, en flujo | Ver `portal/app/api/[...path]/route.ts` |
+
+**Copias.** `montalvo-resultados-backup` copia cada noche TODOS los archivos, videos incluidos, y hasta el 2026-10-03 no borraba ninguna copia (20 acumuladas, 509 MB). Con videos el disco —compartido con el CRM— se llena en semanas. La plantilla `ops/copias-cifradas.sh` ya retiene 14 días; aplicarla en el servidor borra las copias más viejas y está **pendiente de autorización del propietario**.

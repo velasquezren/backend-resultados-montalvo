@@ -1,14 +1,20 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
-import { dateLabel } from "@/lib/types";
+import { AdjuntoPaciente, dateLabel } from "@/lib/types";
+import PatientMedia from "./PatientMedia";
 type Result = {
   estudio: string;
   fechaEstudio: string;
   medico: string;
   disponible: boolean;
   mensaje: string;
+  /** Videos e imágenes que el médico sumó. Solo con el informe publicado. */
+  adjuntos?: AdjuntoPaciente[];
 };
+
+/** La sesión dura 15 minutos; se renueva un poco antes para no cortar una descarga. */
+const RENOVAR_SESION_MS = 12 * 60_000;
 type Estado =
   | { tipo: "abriendo" }
   | { tipo: "listo"; result: Result }
@@ -48,11 +54,19 @@ const FLECHA = "M9 6l6 6-6 6";
  */
 export default function PatientPortal({ accessId }: { accessId: string }) {
   const [estado, setEstado] = useState<Estado>({ tipo: "abriendo" });
+  const sesionDesde = useRef(0);
+
+  /** El enlace es la llave: renovar la sesión es volver a «abrirlo», sin pedir nada. */
+  const asegurarSesion = useCallback(async (forzar = false) => {
+    if (!forzar && Date.now() - sesionDesde.current < RENOVAR_SESION_MS) return;
+    await api(`v1/portal/accesos/${accessId}/ingresar`, "POST");
+    sesionDesde.current = Date.now();
+  }, [accessId]);
 
   const abrir = useCallback(async () => {
     setEstado({ tipo: "abriendo" });
     try {
-      await api(`v1/portal/accesos/${accessId}/ingresar`, "POST");
+      await asegurarSesion(true);
       setEstado({ tipo: "listo", result: await api<Result>("v1/portal/informe") });
     } catch (err) {
       /* 401 es un enlace vencido o retirado: se dice qué hacer, no «error». */
@@ -65,7 +79,7 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
             err instanceof Error ? err.message : "No pudimos abrir tu resultado.",
         });
     }
-  }, [accessId]);
+  }, [asegurarSesion]);
 
   useEffect(() => {
     void abrir();
@@ -111,6 +125,10 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
               <p role="status" className="pac-aviso">{estado.result.mensaje}</p>
             )}
           </article>
+
+          {estado.result.disponible && !!estado.result.adjuntos?.length && (
+            <PatientMedia adjuntos={estado.result.adjuntos} asegurarSesion={asegurarSesion} />
+          )}
 
           <nav className="pac-lista" aria-label="Qué más puedes hacer">
             <a className="pac-fila" rel="noreferrer" target="_blank"

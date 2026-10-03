@@ -1,5 +1,12 @@
 # Contexto de continuidad — Montalvo
 
+> **Actualización 3 de octubre de 2026.** El médico suma videos e imágenes al
+> informe (también ya publicado) y el paciente los ve, guarda y comparte desde
+> su enlace. Tabla `Adjunto`, cifrado por trozos `MNTV2`, ClamAV y Apache con
+> límites de 110 MB. Detalle en [arquitectura](docs/arquitectura.md#videos-e-imágenes-del-informe)
+> y [operación](docs/operacion.md#videos-e-imágenes). **Pendiente de OK:**
+> retención de 14 días en las copias diarias (hoy no se borra ninguna).
+
 > **Actualización 23 de septiembre de 2026 — manda sobre todo lo de abajo.**
 >
 > - **Todo está en `main` y desplegado.** Ningún repositorio tiene cambios

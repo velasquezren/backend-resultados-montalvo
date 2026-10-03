@@ -17,6 +17,10 @@ enum EstadoInforme {
   PUBLICADO
   RETIRADO
 }
+enum TipoAdjunto {
+  VIDEO
+  IMAGEN
+}
 
 model Usuario {
   id String @id @default(uuid()) @db.Uuid
@@ -80,6 +84,7 @@ model Informe {
   archivoVistaId String? @unique @db.Uuid
   archivoVista Archivo? @relation("ArchivoVista", fields: [archivoVistaId], references: [id])
   archivos Archivo[] @relation("ArchivosInforme")
+  adjuntos Adjunto[]
   acceso AccesoPaciente?
   publicadoEn DateTime?
   retiradoEn DateTime?
@@ -102,6 +107,31 @@ model Archivo {
   bytes Int
   paginas Int
   createdAt DateTime @default(now())
+}
+
+/// Videos e imágenes que el médico suma al informe para que el paciente los
+/// vea, los guarde y los comparta (ver `src/results/adjuntos.ts`). El PDF del
+/// resultado sigue siendo `Archivo`: esto lo acompaña, no lo reemplaza.
+model Adjunto {
+  id String @id @default(uuid()) @db.Uuid
+  informeId String @db.Uuid
+  informe Informe @relation(fields: [informeId], references: [id])
+  tipo TipoAdjunto
+  /// El tipo REAL, leído de los primeros bytes; nunca el que declaró el navegador.
+  mime String @db.VarChar(40)
+  /// Como lo llamó el médico, para que lo reconozca. Al paciente no se le muestra.
+  nombre String @db.VarChar(160)
+  clave String @unique
+  /// SHA-256 del contenido, calculado al subirlo.
+  sha256 String
+  bytes Int
+  subidoPor String @db.VarChar(80)
+  createdAt DateTime @default(now())
+  /// Quitado por el médico. Los bytes se borran del almacenamiento en el acto
+  /// —un video en la ficha equivocada no puede seguir guardado—; la fila queda
+  /// como rastro, junto a la entrada de auditoría.
+  eliminadoEn DateTime?
+  @@index([informeId, createdAt])
 }
 
 model AccesoPaciente {

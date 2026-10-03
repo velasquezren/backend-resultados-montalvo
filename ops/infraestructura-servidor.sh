@@ -12,7 +12,9 @@ cp -n /etc/clamav/clamd.conf /etc/clamav/clamd.conf.antes-resultados || true
 python3 - <<'PY'
 from pathlib import Path
 p=Path('/etc/clamav/clamd.conf')
-settings={'TCPAddr':'127.0.0.1','TCPSocket':'3310','StreamMaxLength':'12M','MaxFileSize':'12M','MaxScanSize':'32M','MaxThreads':'2','MaxQueue':'4','AlertExceedsMax':'yes'}
+# 110M: los videos e imágenes del informe pesan hasta 100 MB (src/files/medios.ts). Con 12M
+# clamd respondía «size limit exceeded» y ningún video podía verificarse.
+settings={'TCPAddr':'127.0.0.1','TCPSocket':'3310','StreamMaxLength':'110M','MaxFileSize':'110M','MaxScanSize':'220M','MaxThreads':'2','MaxQueue':'4','AlertExceedsMax':'yes'}
 lines=[line for line in p.read_text().splitlines() if not any(line.startswith(key+' ') for key in settings)]
 p.write_text('\n'.join(lines)+'\n'+'\n'.join(key+' '+value for key,value in settings.items())+'\n')
 PY

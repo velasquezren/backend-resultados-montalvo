@@ -4,11 +4,12 @@ import { digest, token } from '../auth/crypto';
 import { AppConfig, CONFIG } from '../config';
 import { Database } from '../database';
 import { problem } from '../errors';
+import { AdjuntoParaServir, Adjuntos } from './adjuntos';
 import { archivoParaVer, Results } from './results';
 
 @Injectable()
 export class PatientPortal {
-  constructor(private readonly db: Database, private readonly attempts: Attempts, private readonly results: Results, @Inject(CONFIG) private readonly config: AppConfig) {}
+  constructor(private readonly db: Database, private readonly attempts: Attempts, private readonly results: Results, private readonly adjuntos: Adjuntos, @Inject(CONFIG) private readonly config: AppConfig) {}
   /**
    * El enlace es la llave: abrirlo da una sesión de 15 minutos para ESE
    * informe, sin código (decidido con la clínica el 2026-09-23: el código de
@@ -42,8 +43,26 @@ export class PatientPortal {
     /* Solo la primera vez, y solo si ya está publicado: «abierto» le dice a
        recepción que el paciente vio su resultado, no que visitó una espera. */
     if (report.estado === 'PUBLICADO') await this.db.accesoPaciente.updateMany({ where: { id: access.id, abiertoEn: null }, data: { abiertoEn: new Date() } });
+    /* Los videos e imágenes se ven con el informe publicado, no antes: un
+       borrador todavía puede cambiar de manos. */
+    const adjuntos = report.estado === 'PUBLICADO' ? await this.adjuntos.listaParaPaciente(report.id) : [];
     return { estado: report.estado, estudio: report.estudio, fechaEstudio: report.fechaEstudio, medico: report.medico.nombre,
-      disponible: report.estado === 'PUBLICADO', mensaje: report.estado === 'PUBLICADO' ? 'Tu informe está disponible. Puedes descargarlo.' : 'Estamos preparando tu informe. Puedes volver a consultar más adelante.' };
+      disponible: report.estado === 'PUBLICADO', mensaje: report.estado === 'PUBLICADO' ? 'Tu informe está disponible. Puedes descargarlo.' : 'Estamos preparando tu informe. Puedes volver a consultar más adelante.',
+      adjuntos };
+  }
+  /**
+   * Un video o imagen del informe de ESTA sesión. Se vuelve a validar la
+   * sesión en cada tramo que pide el reproductor: retirar el informe corta
+   * también un video a medio ver.
+   */
+  async adjunto(secret: string, adjuntoId: string): Promise<{ adjunto: AdjuntoParaServir; accesoId: string; informeId: string }> {
+    const { access } = await this.access(secret);
+    if (access.informe.estado !== 'PUBLICADO') problem(409, 'RESULTADO_EN_PREPARACION', 'Tu informe todavía está en preparación. Vuelve a consultar más adelante.');
+    return { adjunto: await this.adjuntos.delInforme(access.informe.id, adjuntoId), accesoId: access.id, informeId: access.informe.id };
+  }
+  /** La descarga para guardar: la única lectura del paciente que queda en la auditoría (ver el tramo arriba). */
+  async registrarDescarga(accesoId: string, informeId: string): Promise<void> {
+    await this.db.auditoria.create({ data: { actorId: accesoId, informeId, accion: 'ADJUNTO_DESCARGADO_PACIENTE' } });
   }
   /**
    * El PDF del paciente. Por omisión la versión liviana —la misma, con las

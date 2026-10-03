@@ -27,12 +27,15 @@ Alta inicial por CLI. La recuperación de contraseña mediante email y la admini
 | GET `/v1/informes/configuracion` | Límite de PDF, modo de acceso del paciente y estudios frecuentes |
 | GET `/v1/informes` | Query `pagina=1`, `limite=25` (máximo 100), `estado?`, `pacienteId?`. Resultado `{datos,total,pagina,limite,totalPaginas}` |
 | POST `/v1/informes` | `{pacienteId,estudio,fechaEstudio}` → `{informe,acceso:{id,expiraEn,url}}`; 201 |
-| GET `/v1/informes/:id` | Informe, paciente, médico, archivo sin clave de almacenamiento, acceso con vencimiento y primera apertura |
+| GET `/v1/informes/:id` | Informe, paciente, médico, archivo sin clave de almacenamiento, acceso con vencimiento y primera apertura, y `adjuntos: [{id,tipo:"VIDEO"\|"IMAGEN",mime,nombre,bytes,createdAt}]` |
 | POST `/v1/informes/:id/pdf` | `multipart/form-data`: `archivo` PDF y `revision`. Devuelve informe con revisión incrementada; 201 |
 | GET `/v1/informes/:id/pdf` | PDF adjunto; también permite revisión médica del borrador |
 | POST `/v1/informes/:id/publicar` | Contrato de publicación debajo; 200 |
 | POST `/v1/informes/:id/retirar` | `{revision,motivo}` de 5–250 caracteres; revoca acceso; 200 |
 | POST `/v1/informes/:id/acceso/renovar` | Sin cuerpo → `{id,expiraEn,url}`: el **mismo** enlace, 30 días más desde hoy. Para cortarlo, retirar |
+| POST `/v1/informes/:id/adjuntos` | `multipart/form-data` con un solo campo `archivo` (video o imagen, hasta 100 MB). Borrador **o publicado**; retirado → 409. El tipo se decide por los primeros bytes (MP4, MOV, WebM, GIF, JPG, PNG, WebP); otro formato → 400 `FORMATO_NO_ADMITIDO` con cómo convertirlo. Más de 6 por informe → 409 `LIMITE_ADJUNTOS`. Devuelve el informe con `adjuntos`; 201 |
+| GET `/v1/informes/:id/adjuntos/:adjuntoId` | El archivo, con `Range` (206 + `Content-Range`), para la vista previa del médico |
+| POST `/v1/informes/:id/adjuntos/:adjuntoId/eliminar` | Lo quita: los bytes se borran del almacenamiento, la fila queda marcada. Devuelve el informe; 200 |
 
 Todas estas rutas requieren sesión médica o admin. Médico: solo informes propios; otro médico recibe 404. Los pacientes son fichas compartidas que se localizan por identificador exacto. No existe listado público de fichas.
 
@@ -51,7 +54,8 @@ Después de cualquier mutación, usar la nueva revisión. Tras 409 volver a cons
 | Método / ruta | Entrada / resultado |
 | --- | --- |
 | POST `/v1/portal/accesos/:id/ingresar` | Sin cuerpo: el enlace es la llave → `{token,expiraEn}`. 401 si venció, se revocó o se retiró el informe |
-| GET `/v1/portal/informe` | Sesión paciente → `{estado,estudio,fechaEstudio,medico,disponible,mensaje}`. Si está publicado, marca la primera apertura |
+| GET `/v1/portal/informe` | Sesión paciente → `{estado,estudio,fechaEstudio,medico,disponible,mensaje,adjuntos:[{id,tipo,mime,bytes}]}`. `adjuntos` va vacío mientras no esté publicado y nunca lleva el nombre del archivo. Si está publicado, marca la primera apertura |
+| GET `/v1/portal/informe/adjuntos/:adjuntoId` | Sesión paciente, informe publicado → el video o imagen `inline`, con `Range` (206 + `Content-Range`; 416 si el tramo no cabe): sin eso Safari en el iPhone no reproduce. `?descargar=1` lo entrega `attachment` para guardarlo, y es lo único que se audita (`ADJUNTO_DESCARGADO_PACIENTE`). Cupo propio de 600 por minuto e IP: un video pide decenas de tramos |
 | GET `/v1/portal/informe/pdf` | Sesión paciente, informe publicado → `application/pdf` `inline`: se abre en el visor del teléfono. Sirve la **versión liviana** si ya existe (ver arquitectura), si no el original |
 | GET `/v1/portal/informe/pdf/original` | Igual, pero el archivo tal cual lo publicó el médico, `attachment`: para imprimir o guardar en máxima calidad |
 | POST `/v1/portal/salir` | Revoca sesión paciente |

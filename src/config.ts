@@ -1,5 +1,19 @@
 import { isAbsolute, resolve } from 'node:path';
 
+/** Carpeta privada del almacenamiento local. Una sola definición: la usan la configuración y las subidas. */
+export function directorioPrivado(): string {
+  return resolve(process.env.PRIVATE_STORAGE_DIR ?? 'var/private');
+}
+
+/**
+ * Donde multer deja una subida de adjunto mientras se verifica: dentro del
+ * almacenamiento privado (mismos permisos, mismo disco) y nunca servida. Lo que
+ * quede por un corte lo borra el mantenimiento horario.
+ */
+export function directorioSubidas(): string {
+  return resolve(directorioPrivado(), '.subidas');
+}
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Falta configurar ${name}`);
@@ -27,7 +41,7 @@ export function readConfig() {
   const port = Number(process.env.PORT ?? 3010);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT inválido');
   return { production, databaseUrl, hmacKey, origins, port, storage, storageKey,
-    portalUrl: portal.href.replace(/\/$/, ''), privateDir: resolve(process.env.PRIVATE_STORAGE_DIR ?? 'var/private'),
+    portalUrl: portal.href.replace(/\/$/, ''), privateDir: directorioPrivado(),
   };
 }
 export type AppConfig = ReturnType<typeof readConfig>;

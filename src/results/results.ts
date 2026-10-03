@@ -9,7 +9,8 @@ import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { DURACION_REVISION_MS, firmarRevision, leerRevision } from './revision';
 
 export function scope(actor: Actor): Prisma.InformeWhereInput { return actor.rol === 'ADMIN' ? {} : { medicoId: actor.id }; }
-const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } } } satisfies Prisma.InformeInclude;
+const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } },
+  adjuntos: { where: { eliminadoEn: null }, select: { id: true, tipo: true, mime: true, nombre: true, bytes: true, createdAt: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] } } satisfies Prisma.InformeInclude;
 /**
  * La lista solo pinta paciente, estudio, fecha y estado. Traer el detalle
  * completo obligaba a Prisma a consultar cinco relaciones por página para

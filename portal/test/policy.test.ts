@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allowed, sameOrigin } from "../lib/proxy-policy.ts";
+import { allowed, esSubidaDeAdjunto, sameOrigin } from "../lib/proxy-policy.ts";
 test("el proxy no expone webhooks ni credenciales de integración CRM", () => {
   for (const path of [
     "webhooks/whatsapp",
@@ -44,4 +44,21 @@ test("el enlace de revisión del CRM: solo GET y solo con su forma exacta", () =
   for (const malo of ["cualquiera", `${enlace}x`, enlace.replace(".1790000000.", ".179.")])
     assert.equal(allowed(`v1/revision/${malo}/pdf`, "GET"), false);
   assert.equal(allowed("v1/portal/informe/pdf/original", "GET"), true);
+});
+
+test("videos e imágenes: subir y quitar por POST, ver por GET, solo con ids válidos", () => {
+  const informe = "00000000-0000-4000-8000-000000000000";
+  const adjunto = "11111111-1111-4111-8111-111111111111";
+  assert.equal(allowed(`v1/informes/${informe}/adjuntos`, "POST"), true);
+  assert.equal(allowed(`v1/informes/${informe}/adjuntos/${adjunto}/eliminar`, "POST"), true);
+  assert.equal(allowed(`v1/informes/${informe}/adjuntos/${adjunto}`, "GET"), true);
+  assert.equal(allowed(`v1/portal/informe/adjuntos/${adjunto}`, "GET"), true);
+  assert.equal(allowed(`v1/informes/${informe}/adjuntos/${adjunto}`, "POST"), false);
+  assert.equal(allowed(`v1/portal/informe/adjuntos/${adjunto}`, "POST"), false);
+  assert.equal(allowed(`v1/portal/informe/adjuntos/../pdf`, "GET"), false);
+  assert.equal(allowed(`v1/informes/${informe}/adjuntos/x/eliminar`, "POST"), false);
+  /* Solo la subida viaja en flujo con el tope grande; el PDF sigue con el suyo. */
+  assert.equal(esSubidaDeAdjunto(`v1/informes/${informe}/adjuntos`, "POST"), true);
+  assert.equal(esSubidaDeAdjunto(`v1/informes/${informe}/pdf`, "POST"), false);
+  assert.equal(esSubidaDeAdjunto(`v1/informes/${informe}/adjuntos`, "GET"), false);
 });

@@ -208,6 +208,7 @@ export default function DoctorPortal() {
           key={selected.id}
           report={selected}
           initialAccess={access}
+          limites={config ?? undefined}
           onChange={setSelected}
           onBack={() => {
             setSelected(null);
