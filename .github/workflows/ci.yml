@@ -28,7 +28,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run migrate
-      - run: node --test dist/test/unit.test.js dist/test/integration.test.js
+      - run: node --test --test-concurrency=1 dist/test/unit.test.js dist/test/integration.test.js dist/test/adjuntos.integration.test.js
   portal:
     runs-on: ubuntu-latest
     defaults:
