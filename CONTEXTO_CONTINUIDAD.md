@@ -1,5 +1,20 @@
 # Contexto de continuidad — Montalvo
 
+> **13/10/2026, 13:48 La Paz — autoconsulta DESPLEGADA:** API `1604ded` en
+> `/opt/montalvo-resultados/releases/20261013-informes-whatsapp-1604ded`,
+> `CRM_AUTOSERVICIO_INFORMES=on`. CRM `ed7f204` habilita exclusivamente Prueba y
+> Recepción. El menú general de Recepción sigue apagado: se solicita por texto.
+> Teléfono vinculado a PAC → selección explícita del PDF; sin PAC → pide número
+> de carnet y revisión humana, sin autorizar por CI aislado. Respaldo verificado
+> `/root/backup-informes-20261013-174423-resultados.sql.gz` y configuración
+> `-resultados.env`; release anterior conservado. El subdirectorio `portal` del
+> release nuevo enlaza al portal anterior, sin recompilarlo ni cambiarlo.
+> Siete migraciones al día; 22 unitarias y 54 integraciones sintéticas aprobadas.
+> Health/DB y consulta privada desde CRM verificados; no hubo envíos reales de
+> prueba a Meta. Estado detallado en `backend-crm-montalvo/docs/ESTADO_ACTUAL.md`.
+> Esta entrada sustituye el estado local/apagado de la implementación inicial.
+
+
 > **13/10/2026 — cambios locales, SIN despliegue:** autoconsulta de informes
 > por WhatsApp desde el CRM. Dos rutas privadas nuevas, apagadas mediante
 > `CRM_AUTOSERVICIO_INFORMES=off`. El paciente puede elegir su PDF; la IA no lo
