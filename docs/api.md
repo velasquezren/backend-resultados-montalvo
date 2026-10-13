@@ -75,3 +75,35 @@ Este proyecto no expone webhook de WhatsApp: el único receptor de eventos de Me
 **Filtros y panorama de la cola (desde el 2026-09-30).** Los filtros se resuelven en el portal, donde se corta la página: `buscar` (nombre, PAC o CI, sin distinguir mayúsculas), `abierto`, `vigente` (enlace no vencido ni revocado) e `ids` (hasta 100, devueltos en el orden pedido). GET `/v1/integraciones/crm/informes/panorama[?buscar=…]` → `{totales:{todos,abiertos,vencidosSinAbrir}, vigentesSinAbrir:[ids], truncado, coinciden?:[ids]}`: los ids vigentes y sin abrir, enteros y ordenados como la cola, para que el CRM parta ese conjunto según sus avisos —«por avisar» / «esperando lectura»— y pagine sobre la lista exacta. Tope 5.000 (el enlace dura 30 días); si se supera, `truncado: true` en vez de cortar callado. `buscar` no mueve los totales: solo marca `coinciden`.
 
 **Revisión desde el CRM (desde el 2026-09-29).** POST `/v1/integraciones/crm/informes/:id/revision` (credencial CRM) → `{url, expiraEn}`: un enlace al visor del portal, `<origen>/revision/<informeId>.<vence>.<firma>`, firmado con `SESSION_HMAC_KEY` y un prefijo propio, válido 10 minutos y solo para informes publicados (404 si no). El portal carga el PDF con GET `/v1/revision/<enlace>/pdf` —público; la firma es la credencial, 401 si no vale o venció, 404 si se retiró—, `inline`, versión liviana, auditado como `PDF_REVISADO_CRM` y **sin tocar `abiertoEn`**. El CRM recibe el enlace, nunca el PDF: la ruta anterior `GET /v1/integraciones/crm/informes/:id/pdf` se retiró.
+
+## Autoconsulta de informes por WhatsApp — local, apagada
+
+Estas rutas son exclusivas de la integración servidor–servidor del CRM, con el
+`CRM_INTEGRATION_TOKEN` existente y `CRM_AUTOSERVICIO_INFORMES=on`. Sin ese permiso
+responden 503. No se incorporan al proxy del portal ni aceptan sesiones públicas,
+PAC/CI como contraseña, o tokens de médico en lugar de la credencial de integración.
+El CRM debe resolver la identidad desde su conversación y ficha, nunca desde una
+selección del modelo de IA. No se permite búsqueda aproximada.
+
+| Método / ruta | Entrada | Resultado |
+| --- | --- | --- |
+| POST `/v1/integraciones/crm/paciente/informes` | `{pac,ci?,pagina?}`; página por defecto 1, rango 1–1000 | `{datos:[{id,archivoId,estudio,fechaEstudio}],total,pagina,limite:7}`. Solo PUBLICADO, archivo original y acceso vigente/no revocado. Orden fecha descendente e ID descendente |
+| POST `/v1/integraciones/crm/paciente/informes/:id/pdf` | `{pac,ci?,archivoId}`; IDs UUID | PDF original privado, máximo de dominio 10 MiB. El ID de archivo debe coincidir con la versión actual del informe; respuesta `no-store, private` |
+
+PAC exacto y normalizado; si ambos sistemas tienen CI y discrepan, 404 genérico.
+Un paciente desconocido no revela otras fichas. Una lista vacía devuelve 200 sin
+inventar disponibilidad ni renovar accesos. Límites compartidos de la credencial:
+60 consultas/minuto y 20 descargas/minuto; exceso 429. No son tarifas de Meta.
+
+El PDF se revalida antes y después de leer los bytes: retiro, acceso vencido,
+revocación o reemplazo del original impiden servir una selección antigua.
+`PDF_PREPARADO_WHATSAPP` registra preparación, no entrega ni lectura. Nunca se
+actualiza `abiertoEn` por esta ruta. No se devuelven claves de almacenamiento,
+enlaces de acceso, diagnósticos estructurados ni datos del médico.
+
+Este contrato autoriza al CRM a transferir el PDF seleccionado a Meta en memoria,
+sin otra copia persistente en el CRM. El archivo quedará en el WhatsApp del
+paciente si se envía. Retirarlo en Resultados no elimina una copia ya entregada.
+La identificación civil del titular del número y los teléfonos compartidos son
+responsabilidad del procedimiento de vinculación del CRM; estas rutas no aportan
+un segundo factor ni autorización de tutores.

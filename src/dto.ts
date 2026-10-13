@@ -6,6 +6,16 @@ export class LoginDto {
   @IsEmail() @MaxLength(254) email!: string;
   @IsString() @Length(1, 128) password!: string;
 }
+
+/** Identidad tomada por el CRM de su ficha; nunca del texto de WhatsApp. */
+export class InformesPacienteCrmDto {
+  @IsString() @Length(2, 40) @Matches(/^[A-Z0-9-]+$/i) pac!: string;
+  @IsOptional() @IsString() @Length(3, 40) ci?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(1000) pagina: number = 1;
+}
+export class PdfPacienteCrmDto extends InformesPacienteCrmDto {
+  @IsUUID() archivoId!: string;
+}
 export class UserDto {
   @IsEmail() @MaxLength(254) email!: string;
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(2, 160) nombre!: string;

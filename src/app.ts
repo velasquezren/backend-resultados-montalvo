@@ -8,6 +8,7 @@ import { Database } from './database';
 import { Attempts, AuthGuard, AuthService } from './auth/auth';
 import { PrivateFiles, PdfScanner } from './files/files';
 import { Results } from './results/results';
+import { InformesChat } from './results/informes-chat';
 import { FileMakerGuard, FileMakerIntake } from './results/filemaker';
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
@@ -22,7 +23,7 @@ import { ApiErrors } from './errors';
   providers: [
     { provide: CONFIG, useFactory: readConfig }, Database, Attempts, AuthService,
     { provide: APP_GUARD, useClass: AuthGuard }, PrivateFiles, PdfScanner,
-    Patients, Results, Adjuntos, PatientPortal, Mantenimiento, VistasLivianas, FileMakerIntake, FileMakerGuard,
+    Patients, Results, InformesChat, Adjuntos, PatientPortal, Mantenimiento, VistasLivianas, FileMakerIntake, FileMakerGuard,
   ],
 })
 export class AppModule {}

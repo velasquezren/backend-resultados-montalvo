@@ -753,3 +753,90 @@ test('la cola del CRM se filtra por búsqueda, apertura y vigencia, y el panoram
   }
   assert.equal((await api('/v1/integraciones/crm/informes/panorama', 'GET')).status, 401);
 });
+
+test('autoconsulta CRM apagada, autenticación y paciente exacto; no revela borradores ni otra ficha', async () => {
+  // Aislar la cuota sintética de carga acumulada por las pruebas anteriores.
+  await db.limiteIntentos.deleteMany();
+  const ruta = '/v1/integraciones/crm/paciente/informes';
+  const token = 'c'.repeat(40);
+  const id = `CHAT-${randomUUID().slice(0, 8)}`;
+  const publicado = await ready({ pac: id, ci: id }); await publish(publicado.informe);
+  const ajeno = await ready(); await publish(ajeno.informe);
+  delete process.env.CRM_AUTOSERVICIO_INFORMES;
+  assert.equal((await api(ruta, 'POST', { pac: id }, token)).status, 503);
+  process.env.CRM_AUTOSERVICIO_INFORMES = 'on';
+  try {
+    assert.equal((await api(ruta, 'POST', { pac: id })).status, 401);
+    assert.equal((await api(ruta, 'POST', { pac: id, ci: 'OTRO-CI' }, token)).status, 404);
+    assert.equal((await api(ruta, 'POST', { pac: 'NO-EXISTE' }, token)).status, 404);
+    assert.equal((await api(ruta, 'POST', { pac: id, pagina: 0 }, token)).status, 400);
+    const lista = await api<{ datos: Record<string, unknown>[]; total: number }>(ruta, 'POST', { pac: id, ci: id }, token);
+    assert.equal(lista.status, 200); assert.equal(lista.data.total, 1);
+    assert.equal(lista.data.datos[0]!.id, publicado.informe.id);
+    assert.deepEqual(Object.keys(lista.data.datos[0]!).sort(), ['archivoId', 'estudio', 'fechaEstudio', 'id']);
+    await db.informe.update({ where: { id: publicado.informe.id }, data: { estado: 'BORRADOR' } });
+    assert.equal((await api<{ total: number }>(ruta, 'POST', { pac: id }, token)).data.total, 0);
+  } finally { delete process.env.CRM_AUTOSERVICIO_INFORMES; }
+});
+
+test('PDF para WhatsApp verifica paciente, versión original, publicación y acceso; no marca leído', async () => {
+  const id = `PDF-${randomUUID().slice(0, 8)}`;
+  const publicado = await ready({ pac: id, ci: id }); await publish(publicado.informe);
+  const ruta = `/v1/integraciones/crm/paciente/informes/${publicado.informe.id}/pdf`;
+  const descargar = (pac = id, archivoId = publicado.informe.archivoId) => fetch(`${base}${ruta}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${'c'.repeat(40)}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ pac, archivoId }),
+  });
+  process.env.CRM_AUTOSERVICIO_INFORMES = 'on';
+  try {
+    assert.equal((await descargar('OTRO-PAC')).status, 404);
+    assert.equal((await descargar(id, randomUUID())).status, 404);
+    const r = await descargar(); assert.equal(r.status, 200);
+    assert.match(r.headers.get('content-type')!, /application\/pdf/);
+    assert.deepEqual(Buffer.from(await r.arrayBuffer()), pdf);
+    assert.equal((await db.accesoPaciente.findUniqueOrThrow({ where: { id: publicado.acceso.id } })).abiertoEn, null);
+    assert.equal(await db.auditoria.count({ where: { informeId: publicado.informe.id, accion: 'PDF_PREPARADO_WHATSAPP' } }), 1);
+    await db.accesoPaciente.update({ where: { id: publicado.acceso.id }, data: { revocadoEn: new Date() } });
+    assert.equal((await descargar()).status, 404);
+    await db.accesoPaciente.update({ where: { id: publicado.acceso.id }, data: { revocadoEn: null, expiraEn: new Date(0) } });
+    assert.equal((await descargar()).status, 404);
+  } finally { delete process.env.CRM_AUTOSERVICIO_INFORMES; }
+});
+
+test('autoconsulta pagina siete informes, sin perder ni repetir resultados', async () => {
+  await db.limiteIntentos.deleteMany();
+  const pac = `PAG-${randomUUID().slice(0, 8)}`;
+  const uno = await ready({ pac }); await publish(uno.informe);
+  const paciente = await db.paciente.findUniqueOrThrow({ where: { pac: pac.toUpperCase() } });
+  for (let n = 0; n < 7; n++) {
+    const r = await api<Created>('/v1/informes', 'POST', { pacienteId: paciente.id, estudio: `Estudio sintético ${n}`, fechaEstudio: '2026-01-01' }, medico);
+    const cargado = await upload(r.data.informe); assert.equal(cargado.status, 201); await publish(cargado.data);
+  }
+  process.env.CRM_AUTOSERVICIO_INFORMES = 'on';
+  try {
+    type Lista = { datos: { id: string }[]; total: number; limite: number };
+    const primera = await api<Lista>('/v1/integraciones/crm/paciente/informes', 'POST', { pac }, 'c'.repeat(40));
+    const segunda = await api<Lista>('/v1/integraciones/crm/paciente/informes', 'POST', { pac, pagina: 2 }, 'c'.repeat(40));
+    assert.equal(primera.data.total, 8); assert.equal(primera.data.limite, 7);
+    assert.equal(primera.data.datos.length, 7); assert.equal(segunda.data.datos.length, 1);
+    assert.equal(new Set([...primera.data.datos, ...segunda.data.datos].map(i => i.id)).size, 8);
+  } finally { delete process.env.CRM_AUTOSERVICIO_INFORMES; }
+});
+
+test('un retiro durante la lectura de bytes bloquea el PDF y no registra entrega ni lectura', async () => {
+  const pac = `RACE-${randomUUID().slice(0, 8)}`;
+  const r = await ready({ pac }); await publish(r.informe);
+  const { Results } = await import('../src/results/results');
+  const results = app.get(Results); const leer = results.readFile.bind(results);
+  results.readFile = async id => {
+    const bytes = await leer(id);
+    await db.informe.update({ where: { id: r.informe.id }, data: { estado: 'RETIRADO' } });
+    return bytes;
+  };
+  process.env.CRM_AUTOSERVICIO_INFORMES = 'on';
+  try {
+    const respuesta = await api(`/v1/integraciones/crm/paciente/informes/${r.informe.id}/pdf`, 'POST', { pac, archivoId: r.informe.archivoId }, 'c'.repeat(40));
+    assert.equal(respuesta.status, 404);
+    assert.equal(await db.auditoria.count({ where: { informeId: r.informe.id, accion: 'PDF_PREPARADO_WHATSAPP' } }), 0);
+    assert.equal((await db.accesoPaciente.findUniqueOrThrow({ where: { id: r.acceso.id } })).abiertoEn, null);
+  } finally { results.readFile = leer; delete process.env.CRM_AUTOSERVICIO_INFORMES; }
+});

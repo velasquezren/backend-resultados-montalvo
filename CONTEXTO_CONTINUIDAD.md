@@ -1,5 +1,13 @@
 # Contexto de continuidad — Montalvo
 
+> **13/10/2026 — cambios locales, SIN despliegue:** autoconsulta de informes
+> por WhatsApp desde el CRM. Dos rutas privadas nuevas, apagadas mediante
+> `CRM_AUTOSERVICIO_INFORMES=off`. El paciente puede elegir su PDF; la IA no lo
+> recibe. No hay migración propia. Contrato y límites en `docs/api.md` y
+> `docs/arquitectura.md`; recorrido y activación por línea en
+> `backend-crm-montalvo/docs/informes-por-whatsapp.md` del workspace hermano.
+> Los estados de despliegue anteriores no incluyen esta preparación.
+
 > **Actualización 3 de octubre de 2026.** El médico suma videos e imágenes al
 > informe (también ya publicado) y el paciente los ve, guarda y comparte desde
 > su enlace. Tabla `Adjunto`, cifrado por trozos `MNTV2`, ClamAV y Apache con

@@ -18,6 +18,8 @@ import { AdjuntoParaServir, Adjuntos, descartarSubida, nombreDeDescarga } from '
 import { Patients } from './results/patients';
 import { PatientPortal } from './results/portal';
 import { Results } from './results/results';
+import { InformesChat } from './results/informes-chat';
+import { InformesPacienteCrmDto, PdfPacienteCrmDto } from './dto';
 import { FileMakerGuard, FileMakerIntake } from './results/filemaker';
 
 function fileResponse(response: Response, file: Buffer, disposition: 'inline' | 'attachment' = 'attachment'): void {
@@ -175,11 +177,24 @@ export class PortalController {
 @Public()
 @Controller('v1/integraciones/crm')
 export class CrmIntegrationController {
-  constructor(private readonly results: Results, private readonly attempts: Attempts) {}
+  constructor(private readonly results: Results, private readonly attempts: Attempts, private readonly informesChat: InformesChat) {}
   /** Una sola definición de la credencial: dos copias divergen. */
   private authorize(req: Request): void {
     const expected = process.env.CRM_INTEGRATION_TOKEN;
     if (!expected || expected.length < 32 || !equalSecret(bearer(req), expected)) problem(401, 'INTEGRACION_NO_AUTORIZADA', 'Integración no autorizada.');
+  }
+  /** POST evita dejar identificadores de paciente en las URLs del proxy. */
+  @Post('paciente/informes') @HttpCode(200)
+  async patientReports(@Body() dto: InformesPacienteCrmDto, @Req() req: Request) {
+    this.authorize(req);
+    await this.attempts.consume('crm-autoconsulta', 'consumer', 60, 60);
+    return this.informesChat.listar(dto);
+  }
+  @Post('paciente/informes/:id/pdf') @HttpCode(200)
+  async patientPdf(@Param('id', ParseUUIDPipe) id: string, @Body() dto: PdfPacienteCrmDto, @Req() req: Request, @Res() response: Response) {
+    this.authorize(req);
+    await this.attempts.consume('crm-pdf-chat', 'consumer', 20, 60);
+    fileResponse(response, await this.informesChat.pdf(id, dto));
   }
   /** Cola de entrega del CRM: qué informes publicados hay, de quién, a qué enlace apuntan y si ya se abrieron. */
   @Get('informes') async reports(@Query() dto: InformesCrmDto, @Req() req: Request) {

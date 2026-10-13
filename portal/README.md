@@ -2,6 +2,8 @@
 
 Aplicación Next independiente: médicos en `/`; pacientes en `/resultados/:id`. Comparte colores, Montserrat e isotipo con la web institucional, sin agregar menús al CRM ni modificar la landing.
 
+Para modificar el portal desde otra máquina, usa Node `22.23.2` (`.nvmrc`) y consulta las instrucciones del repositorio en `../AGENTS.md`. El skill de React/Next vive en `../.agents/skills/react-best-practices/`; la documentación de Next que corresponde a la versión instalada se encuentra en `node_modules/next/dist/docs/` después de `npm ci`.
+
 ## Arranque
 
 1. Ejecutar y configurar primero la API del directorio superior.

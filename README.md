@@ -2,6 +2,8 @@
 
 **Continuar desde otra máquina:** leer [CONTEXTO_CONTINUIDAD.md](CONTEXTO_CONTINUIDAD.md) para conocer el estado desplegado, los pendientes y los archivos privados que no viajan con Git.
 
+Para trabajar desde otro equipo, clonar este repositorio y usar Node `22.23.2` (`.nvmrc`) en la raíz y en `portal/`. Instalar las dependencias de cada aplicación con `npm ci --ignore-scripts` y seguir las secciones de desarrollo local de este documento y de [portal/README.md](portal/README.md). Los skills de la API y de React/Next están dentro de `.agents/skills/` para viajar con Git; [AGENTS.md](AGENTS.md) indica cuándo leer cada uno. No hace falta instalar skills globales para este proyecto. Los archivos privados indicados en `CONTEXTO_CONTINUIDAD.md` se trasladan por un canal seguro aparte de Git.
+
 API independiente para que médicos registren pacientes por CI/PAC, adjunten un PDF de ecografía, lo revisen y lo publiquen para consulta privada del paciente. El CRM no autentica médicos ni almacena informes.
 
 **Estado:** backend y portal independiente Next desplegados y verificados en https://resultados.107.175.132.15.nip.io/. El portal está en `portal/` y conserva la identidad visual de la web institucional. **Este proyecto no envía WhatsApp**: el aviso al paciente lo manda recepción desde el CRM (ver *Entrega al paciente*).

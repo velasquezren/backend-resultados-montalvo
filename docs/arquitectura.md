@@ -44,7 +44,7 @@ Desde el 2026-10-03 el médico puede sumar al informe videos e imágenes —un c
 
 Contraseñas scrypt; sesiones persistidas como HMAC. Clave HMAC exclusiva del servicio. Sesiones del médico, del paciente y credencial CRM no son intercambiables. Sesión médica de 8 horas; sesión paciente de 15 minutos; código válido 30 días y renovable.
 
-**El enlace es la llave (desde el 2026-09-23).** El ID de acceso es un UUID aleatorio de 122 bits: no se adivina ni se recorre (límites por IP y por acceso). Quien tenga el mensaje ve el informe; la clínica lo asumió a cambio de quitarle al paciente el código de 12 caracteres en papel. Lo que protege: vencimiento a 30 días, retiro inmediato del informe, registro de la primera apertura (`abiertoEn`) y que el PDF no viaja en el chat. No usar CI ni PAC como contraseña. No existe búsqueda pública de resultados por nombre o documento.
+**El enlace es la llave (desde el 2026-09-23).** El ID de acceso es un UUID aleatorio de 122 bits: no se adivina ni se recorre (límites por IP y por acceso). Quien tenga el mensaje ve el informe; la clínica lo asumió a cambio de quitarle al paciente el código de 12 caracteres en papel. Lo que protege: vencimiento a 30 días, retiro inmediato del informe, registro de la primera apertura (`abiertoEn`) y que el aviso tradicional no incluye el PDF en el chat. La autoconsulta opcional descrita abajo permite al paciente pedir expresamente una copia. No usar CI ni PAC como contraseña. No existe búsqueda pública de resultados por nombre o documento.
 
 No se publican URLs directas de R2: la API verifica sesión y estado antes de entregar bytes. La integridad SHA-256 se comprueba al descargar. `Cache-Control: no-store, private`, `Referrer-Policy: no-referrer`, sin indexación. Nunca añadir analítica que capture contenido clínico, códigos, tokens o cuerpos HTTP.
 
@@ -52,13 +52,33 @@ Los médicos pueden localizar pacientes por identificador exacto, pero no explor
 
 ## Integración CRM
 
-El CRM es el único emisor de WhatsApp. Lee la cola con `GET /v1/integraciones/crm/informes`: informes **publicados**, paginados, con credencial exclusiva (`CRM_INTEGRATION_TOKEN`) que solo lee la cola y renueva enlaces de informes publicados, por loopback en el mismo servidor. Cada fila lleva `informeId`, `estudio`, `fechaEstudio`, `publicadoEn`, `accesoId`, `accesoVigente`, `accesoExpiraEn`, `abiertoEn` y `paciente: { nombre, pac, ci }`. Nunca viajan el código, su hash, el PDF, el médico ni nada clínico. El ID de acceso identifica; el código autoriza. Con `?informeId=` devuelve solo ese, para que el CRM revalide justo antes de enviar.
+El CRM es el único emisor de WhatsApp. Lee la cola con `GET /v1/integraciones/crm/informes`: informes **publicados**, paginados, con credencial exclusiva (`CRM_INTEGRATION_TOKEN`) que solo lee la cola y renueva enlaces de informes publicados, por loopback en el mismo servidor. Cada fila lleva `informeId`, `estudio`, `fechaEstudio`, `publicadoEn`, `accesoId`, `accesoVigente`, `accesoExpiraEn`, `abiertoEn` y `paciente: { nombre, pac, ci }`. Esa cola no entrega el PDF ni datos del médico. El ID de acceso es la llave del enlace del paciente. Con `?informeId=` devuelve solo ese, para que el CRM revalide justo antes de enviar.
 
 **El vínculo lo resuelve el CRM, no este sistema.** Con los identificadores de la fila busca entre sus fichas: primero el PAC (único allí), y si no hay o no cruza, el CI **solo si coincide con exactamente una ficha** en forma canónica (mayúsculas, sin separadores). Un CI repetido en el CRM no se vincula a ninguna: se le muestra a recepción para corregir las fichas. Con CI, el CRM enseña el nombre del portal junto al de la ficha para que recepción confirme antes de enviar. Lo que sigue prohibido es vincular por nombre o por coincidencias aproximadas.
 
 Hasta el 2026-09-22 el vínculo era una columna `referenciaCrm` derivada del PAC, y los pacientes registrados solo con CI no llegaban nunca al CRM (los dos que había en producción, justamente). Esa columna, la tabla `EventoIntegracion` y su endpoint de eventos —que nadie consumía— se retiraron.
 
 El CRM lleva él mismo la cuenta de a quién avisó (`AvisoResultado`, con índice único por informe contra el doble envío). No se comparten tablas ni se hacen joins entre bases.
+
+## Autoconsulta por WhatsApp (local, apagada)
+
+`results/informes-chat.ts` ofrece al CRM una lista exacta por PAC y el PDF original
+seleccionado. Ambas rutas privadas requieren el token CRM y la bandera
+`CRM_AUTOSERVICIO_INFORMES=on`. No se publican en Next. Solo sirven informes
+publicados con acceso vigente y archivo original coincidente; comprueban CI si
+está disponible en ambos lados y revalidan antes/después de leer los bytes.
+Contrato completo en [API](api.md#autoconsulta-de-informes-por-whatsapp--local-apagada).
+
+Esta es una excepción explícita al transporte exclusivo de enlaces: el paciente
+pide una copia para su WhatsApp. El CRM la transfiere a Meta en memoria, sin
+persistirla en su R2 ni crear una URL pública. El modelo de IA no recibe estudios
+ni PDFs de esta consulta. La base y el almacenamiento clínico siguen siendo de
+Resultados. No se crean pacientes, informes, accesos ni renovaciones por esta vía.
+
+La auditoría `PDF_PREPARADO_WHATSAPP` no prueba entrega ni lectura y no actualiza
+`abiertoEn`. La copia ya entregada a WhatsApp no es revocable desde Resultados.
+La asociación fiable entre número y PAC corresponde a recepción; un teléfono
+compartido o reasignado exige revisión humana. No hay autenticación civil extra.
 
 ## Escala y límites explícitos
 
