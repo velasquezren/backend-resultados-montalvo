@@ -60,6 +60,17 @@ Después de cualquier mutación, usar la nueva revisión. Tras 409 volver a cons
 | GET `/v1/portal/informe/pdf/original` | Igual, pero el archivo tal cual lo publicó el médico, `attachment`: para imprimir o guardar en máxima calidad |
 | POST `/v1/portal/salir` | Revoca sesión paciente |
 
+**Adaptador de PDF del portal Next (corrección 2026-10-16, pendiente de despliegue):**
+GET `/resultados/:accesoId/pdf` y `?original=1` intercambian el ID de acceso del
+enlace por una sesión mediante `ingresar`, y solicitan el PDF con ese token solo
+en el servidor. No leen ni modifican cookies; las sesiones de otras pestañas no
+seleccionan el documento. La API sigue validando acceso vigente, publicación y
+retiro antes/después de leer el archivo; conserva límites y auditoría. No hay
+credenciales CRM, URLs de almacenamiento público ni ampliación del plazo del
+enlace. Las respuestas son privadas, no cacheables y sin referrer; los errores
+son HTML de ayuda sin cuerpos internos. HEAD no crea sesiones (405). El contrato
+de la API Nest y las rutas genéricas protegidas por cookie no cambian.
+
 El token de paciente no autentica al médico ni viceversa. Acceso vencido/retirado: 401 con mensaje orientado a recuperación; borrador: consulta permitida con estado de preparación y descarga 409. 
 
 ## Errores

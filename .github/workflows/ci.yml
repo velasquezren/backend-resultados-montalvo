@@ -43,4 +43,4 @@ jobs:
           cache-dependency-path: portal/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run build
-      - run: node --experimental-strip-types --test test/policy.test.ts
+      - run: node --experimental-strip-types --test test/*.test.ts

@@ -110,14 +110,14 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
             </p>
             {estado.result.disponible ? (
               <>
-                <a className="pac-boton" href="/api/v1/portal/informe/pdf" target="_blank" rel="noreferrer">
+                <a className="pac-boton" href={`/resultados/${accessId}/pdf`} target="_blank" rel="noreferrer">
                   <Icono d={DOCUMENTO} /> Ver informe
                 </a>
                 <p className="pac-nota">Se abre en el visor de tu teléfono, desde donde puedes guardarlo.</p>
                 {/* «Ver informe» abre la versión liviana, que carga rápido con
                     datos móviles. Este es el archivo tal cual lo publicó el
                     médico, para imprimirlo o guardarlo en máxima calidad. */}
-                <a className="pac-enlace" href="/api/v1/portal/informe/pdf/original">
+                <a className="pac-enlace" href={`/resultados/${accessId}/pdf?original=1`}>
                   Descargar el original en alta calidad
                 </a>
               </>

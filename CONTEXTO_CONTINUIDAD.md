@@ -1,5 +1,18 @@
 # Contexto de continuidad — Montalvo
 
+> **16/10/2026 — corrección de apertura de PDFs, pendiente de despliegue.** La
+> captura Android muestra el 401 del proxy por falta de cookie, no evidencia de
+> PDF corrupto. Los botones publicados apuntaban a rutas genéricas sin renovar
+> la sesión de 15 minutos. El portal ahora vincula cada apertura al acceso del
+> informe e intercambia el enlace por una sesión solo en servidor. Mantiene la
+> API, permisos, plazos y PDFs existentes; errores legibles en vez de JSON.
+> Ver `portal/README.md` y `docs/api.md`. Preparado en la rama
+> `fix/pdf-paciente-sesion`; no aplicado al servidor.
+> Validación: 21 pruebas del portal aprobadas y `next build --webpack` correcto;
+> HTTP contra Next compilado + API sintética confirma PDF inline/original sin
+> cookies, bloqueo 401 con ayuda HTML, HEAD/POST 405 y exclusión del PDF en
+> robots. No se usaron informes reales ni se probó un dispositivo Android físico.
+
 > **13/10/2026, 13:48 La Paz — autoconsulta DESPLEGADA:** API `1604ded` en
 > `/opt/montalvo-resultados/releases/20261013-informes-whatsapp-1604ded`,
 > `CRM_AUTOSERVICIO_INFORMES=on`. CRM `ed7f204` habilita exclusivamente Prueba y

@@ -27,7 +27,17 @@ El administrador puede crear cuentas médicas; no existe recuperación por email
 ## Comprobaciones
 
 - `npm run build`: compilación y tipos estrictos.
-- `node --experimental-strip-types --test test/policy.test.ts`: métodos/rutas y comprobación de Origin del proxy.
+- `node --experimental-strip-types --test test/*.test.ts`: políticas del proxy y apertura/descarga de PDF contra una API HTTP sintética (sin datos clínicos).
+
+Los botones del paciente abren `/resultados/:accesoId/pdf` (vista liviana) y
+`?original=1` (descarga original). El servidor intercambia el enlace por una
+sesión de ese informe en cada petición: no depende de que el visor móvil reciba
+la cookie de la pestaña ni de que siga vigente la sesión inicial de 15 minutos.
+No prolonga la vigencia del enlace ni permite informes retirados. Los fallos
+muestran una página de ayuda y regreso al informe, nunca JSON como descarga.
+No enviar a pacientes la antigua ruta genérica `/api/v1/portal/informe/pdf`:
+depende de una cookie y no identifica un informe. Compartir solo el enlace del
+portal que genera el sistema. No registrar URLs completas de resultados.
 - GitHub Actions comprueba backend/PostgreSQL y compilación del portal en cada push/PR.
 
 Las pruebas de navegador de esta entrega usan solo pacientes/PDF sintéticos. Falta validar proveedores reales, HTTPS/dominio productivo y el flujo operativo con personal de la clínica antes de cargar documentos reales.
