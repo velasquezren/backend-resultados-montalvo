@@ -1,17 +1,25 @@
 # Contexto de continuidad — Montalvo
 
-> **16/10/2026 — corrección de apertura de PDFs, pendiente de despliegue.** La
+> **16/10/2026 — corrección de apertura de PDFs DESPLEGADA (`caa9a28`).** La
 > captura Android muestra el 401 del proxy por falta de cookie, no evidencia de
 > PDF corrupto. Los botones publicados apuntaban a rutas genéricas sin renovar
 > la sesión de 15 minutos. El portal ahora vincula cada apertura al acceso del
 > informe e intercambia el enlace por una sesión solo en servidor. Mantiene la
 > API, permisos, plazos y PDFs existentes; errores legibles en vez de JSON.
-> Ver `portal/README.md` y `docs/api.md`. Preparado en la rama
-> `fix/pdf-paciente-sesion`; no aplicado al servidor.
+> Ver `portal/README.md` y `docs/api.md`. Portal activo:
+> `/opt/montalvo-resultados/releases/20261016-pdf-sesion-caa9a28/portal`, enlazado
+> desde `current/portal`. La API y el worker conservan su release del 13/10.
+> Reiniciado solamente `resultados-portal`; su caché escribible está declarada
+> en `resultados-portal.service.d/20-pdf-cache.conf`. Versión anterior conservada;
+> reversión: `/root/backup-resultados-portal-20261016-caa9a28/revertir.sh`.
 > Validación: 21 pruebas del portal aprobadas y `next build --webpack` correcto;
 > HTTP contra Next compilado + API sintética confirma PDF inline/original sin
 > cookies, bloqueo 401 con ayuda HTML, HEAD/POST 405 y exclusión del PDF en
 > robots. No se usaron informes reales ni se probó un dispositivo Android físico.
+> En VPS: 21 pruebas y build aprobados. HTTPS confirma ayuda HTML 401 para un
+> acceso sintético inexistente, cabeceras privadas, y JS con los nuevos botones.
+> API/base saludables; portal, API, worker y CRM activos. Sin cambios de base,
+> credenciales o archivos clínicos; los enlaces de WhatsApp existentes se conservan.
 
 > **13/10/2026, 13:48 La Paz — autoconsulta DESPLEGADA:** API `1604ded` en
 > `/opt/montalvo-resultados/releases/20261013-informes-whatsapp-1604ded`,

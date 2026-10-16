@@ -60,7 +60,7 @@ Después de cualquier mutación, usar la nueva revisión. Tras 409 volver a cons
 | GET `/v1/portal/informe/pdf/original` | Igual, pero el archivo tal cual lo publicó el médico, `attachment`: para imprimir o guardar en máxima calidad |
 | POST `/v1/portal/salir` | Revoca sesión paciente |
 
-**Adaptador de PDF del portal Next (corrección 2026-10-16, pendiente de despliegue):**
+**Adaptador de PDF del portal Next (desplegado 2026-10-16):**
 GET `/resultados/:accesoId/pdf` y `?original=1` intercambian el ID de acceso del
 enlace por una sesión mediante `ingresar`, y solicitan el PDF con ese token solo
 en el servidor. No leen ni modifican cookies; las sesiones de otras pestañas no
