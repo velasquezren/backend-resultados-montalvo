@@ -1,6 +1,7 @@
 import { Type, Transform } from 'class-transformer';
-import { ArrayMaxSize, Equals, IsArray, IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, Equals, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { EstadoInforme, Rol } from './generated/prisma/client';
+import { TIPOS_INFORME, TipoInforme } from './results/tipos';
 
 export class LoginDto {
   @IsEmail() @MaxLength(254) email!: string;
@@ -34,6 +35,7 @@ export class BuscarPacienteDto {
   @IsOptional() @IsString() @Length(2, 40) @Matches(/^[A-Z0-9 .-]+$/i) identificador?: string;
 }
 export class CrearInformeDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined) @IsIn(TIPOS_INFORME) tipo?: TipoInforme;
   @IsUUID() pacienteId!: string;
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(3, 160) estudio!: string;
   @Matches(/^\d{4}-\d{2}-\d{2}$/) fechaEstudio!: string;
@@ -47,6 +49,8 @@ export class CrearInformeDto {
  * entrada alterna con validación más laxa es una puerta trasera.
  */
 export class FileMakerInformeDto {
+  /** Omisión compatible con los guiones de ecografía existentes. */
+  @ValidateIf((_object, value: unknown) => value !== undefined) @IsIn(TIPOS_INFORME) tipo?: TipoInforme;
   /**
    * Médico al que se atribuye el informe: es quien lo verá en su portal.
    *
@@ -58,25 +62,25 @@ export class FileMakerInformeDto {
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(2, 160) nombre!: string;
   @IsOptional() @IsString() @Length(3, 40) @Matches(/^[A-Z0-9 .-]+$/i) ci?: string;
   @IsOptional() @IsString() @Length(2, 40) @Matches(/^[A-Z0-9-]+$/i) pac?: string;
-  /** Sin él se usa «Ecografía»: `Informe.tipo` ya nace como ECOGRAFIA. */
+  /** Sin nombre de estudio, se usa el nombre del tipo seleccionado. */
   @IsOptional() @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value) @IsString() @Length(3, 160) estudio?: string;
   @Matches(/^\d{4}-\d{2}-\d{2}$/) fechaEstudio!: string;
   /**
    * Identificador del registro en FileMaker. Sin él, pulsar el botón dos veces
-   * deja dos informes del mismo estudio; con él, la segunda llamada devuelve
-   * el primero y no cobra ni duplica nada.
+   * deja dos informes del mismo estudio; con él, el mismo tipo reutiliza el
+   * informe y reemplaza su PDF si cambió. Obligatorio para tipos nuevos.
    */
   @IsOptional() @IsString() @Length(1, 80) @Matches(/^[A-Za-z0-9._:-]+$/) referencia?: string;
   /**
    * `true` publica el informe en la misma llamada, sin que nadie lo mire.
    *
    * El paciente queda alcanzable al instante y el aviso entra en la cola del
-   * CRM. Publicar no tiene vuelta atrás: corregir obliga a retirar y crear
-   * otro. Por omisión queda en borrador.
+   * CRM. FileMaker puede reemplazar el PDF por la misma referencia y tipo,
+   * conservando el historial de archivos. Por omisión queda en borrador.
    *
    * Llega como texto del multipart, no como booleano de JSON.
    */
-  @IsOptional() @Transform(({ value }: { value: unknown }) => value === true || value === 'true') @IsBoolean() publicar?: boolean;
+  @IsOptional() @Transform(({ value }: { value: unknown }) => value === 'true' ? true : value === 'false' ? false : value) @IsBoolean() publicar?: boolean;
 }
 export class RevisionDto {
   @Type(() => Number) @IsInt() @Min(1) revision!: number;
@@ -88,6 +92,7 @@ export class RetirarDto extends RevisionDto {
   @IsString() @Length(5, 250) motivo!: string;
 }
 export class ListarDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined) @IsIn(TIPOS_INFORME) tipo?: TipoInforme;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) pagina = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite = 25;
   @IsOptional() @IsEnum(EstadoInforme) estado?: EstadoInforme;
@@ -104,6 +109,7 @@ const recortar = ({ value }: { value: unknown }) => (typeof value === 'string' ?
  * mostraría 3 de 25 y diría «no hay más» cuando las hay en la siguiente.
  */
 export class InformesCrmDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined) @IsIn(TIPOS_INFORME) tipo?: TipoInforme;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) pagina = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limite = 50;
   /** Un solo informe: el CRM revalida contra el portal justo antes de enviar. */
@@ -126,6 +132,7 @@ export class InformesCrmDto {
 
 /** El panorama de la cola: la búsqueda solo marca qué ids coinciden. */
 export class PanoramaCrmDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined) @IsIn(TIPOS_INFORME) tipo?: TipoInforme;
   @IsOptional() @Transform(recortar) @IsString() @Length(2, 80) buscar?: string;
 }
 export class PasswordDto {

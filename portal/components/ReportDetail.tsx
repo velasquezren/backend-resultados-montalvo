@@ -1,4 +1,5 @@
 "use client";
+import { reportTypeLabel } from '@/lib/types';
 import { FormEvent, useRef, useState } from 'react';
 import { api, ApiError, upload as uploadWithProgress } from '@/lib/client';
 import { Access, Report, dateLabel, reportLabels } from '@/lib/types';
@@ -93,6 +94,7 @@ export default function ReportDetail({
       <div className="page-heading">
         <div>
           <p className="eyebrow">{reportLabels[report.estado]}</p>
+          <p className="eyebrow">{reportTypeLabel(report.tipo)}</p>
           <h1>{report.estudio}</h1>
           <p className="muted">
             {dateLabel(report.fechaEstudio)} · {report.medico.nombre}

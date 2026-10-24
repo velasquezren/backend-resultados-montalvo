@@ -16,7 +16,9 @@ export class Patients {
     if (!any && ((!ci && !pac) || (ci && pac))) problem(400, 'BUSQUEDA_EXACTA_REQUERIDA', 'Busca por CI o por PAC, uno a la vez.');
     // Sigue siendo coincidencia exacta: el identificador solo evita que el
     // médico tenga que saber de antemano si el paciente es de CI o de PAC.
-    const patient = await this.db.paciente.findFirst({ where: any ? { OR: [{ ci: any }, { pac: any }] } : ci ? { ci } : { pac } });
+    const matches = await this.db.paciente.findMany({ where: any ? { OR: [{ ci: any }, { pac: any }] } : ci ? { ci } : { pac }, take: 2 });
+    if (matches.length > 1) problem(409, 'IDENTIFICADOR_AMBIGUO', 'Ese identificador coincide con dos pacientes. Busca específicamente por PAC o CI.');
+    const patient = matches[0];
     if (!patient) problem(404, 'PACIENTE_NO_ENCONTRADO', 'No encontramos ese paciente. Comprueba el identificador o registra sus datos.');
     return patient;
   }

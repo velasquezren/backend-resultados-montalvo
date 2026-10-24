@@ -42,6 +42,9 @@ API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` co
 
 `STORAGE_DRIVER=local` guarda PDFs en `var/private`, fuera de recursos públicos. Sin ClamAV solo se permite desarrollo; producción exige R2 privado o `STORAGE_DRIVER=local-encrypted` con clave AES-256-GCM y `CLAMAV_HOST`. Nunca usar PDFs clínicos reales en desarrollo sin el entorno adecuado.
 
+Los cambios multítipo del 23/10/2026 están preparados localmente, sin despliegue.
+Contrato y orden de publicación en [API](docs/api.md#tipos-clínicos-y-filemaker-23102026-preparado-localmente).
+
 ## Flujo ya disponible
 
 1. Administrador crea cuentas `MEDICO`; cada médico consulta solamente sus informes. Administrador puede consultar todos.
@@ -51,7 +54,7 @@ API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` co
 5. Revisa identidad y PDF y publica. Publicar pone el informe en la cola de recepción del CRM; no envía nada por sí mismo.
 6. El paciente toca el botón del WhatsApp y ve su informe, sin escribir nada: **el enlace es la llave** (decidido con la clínica el 2026-09-23; el código de 12 caracteres en papel era el paso que más lo frenaba). Su sesión dura 15 minutos y solo permite consultar ese informe. El enlace vence a los 30 días; el médico o recepción (desde el CRM) lo extienden sin cambiarlo.
 7. **Videos e imágenes (desde el 2026-10-03).** El médico puede sumar al informe hasta 6 videos o imágenes de 100 MB cada uno (MP4, MOV, WebM, JPG, PNG, GIF, WebP): un clip de la ecografía, un video 4D. Se puede hacer también con el informe ya publicado, que es como llegan desde FileMaker. El paciente los ve en su enlace, los guarda en el teléfono y los comparte (solo el archivo, nunca el enlace). Ver [arquitectura](docs/arquitectura.md#videos-e-imágenes-del-informe).
-8. Si hubo un error, retirar revoca acceso y sesiones y saca el informe de la cola del CRM. Para corregir un informe publicado, retirar y crear otro: no se modifica silenciosamente un resultado ya entregado.
+8. Si hubo un error, retirar revoca acceso y sesiones y saca el informe de la cola del CRM. Desde el portal, retirar y crear otro. FileMaker admite sustituir el PDF por su misma referencia y tipo, conservando archivos y auditoría (ver el contrato de integración).
 
 La confirmación humana comprueba que el PDF pertenece al paciente: la API valida el archivo, pero no interpreta su contenido médico ni verifica una identidad civil.
 

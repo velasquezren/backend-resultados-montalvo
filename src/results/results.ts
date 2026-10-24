@@ -39,7 +39,7 @@ export function escaparComodinesLike(termino: string): string {
 /** Nombre, PAC o CI: lo que la asistente teclea para encontrar a alguien. */
 function coincideCon(buscar: string): Prisma.InformeWhereInput {
   const contiene = { contains: escaparComodinesLike(buscar), mode: 'insensitive' } as const;
-  return { paciente: { OR: [{ nombre: contiene }, { pac: contiene }, { ci: contiene }] } };
+  return { OR: [{ paciente: { OR: [{ nombre: contiene }, { pac: contiene }, { ci: contiene }] } }, { estudio: contiene }] };
 }
 
 /** Enlace que sirve hoy (`true`) o que venció o se revocó (`false`). */
@@ -49,15 +49,15 @@ function segunVigencia(vigente: boolean, ahora: Date): Prisma.AccesoPacienteWher
     : { OR: [{ revocadoEn: { not: null } }, { expiraEn: { lte: ahora } }] };
 }
 
-const summary = { id: true, revision: true, estudio: true, fechaEstudio: true, estado: true, archivoId: true, publicadoEn: true, paciente: { select: { id: true, nombre: true } } } satisfies Prisma.InformeSelect;
+const summary = { id: true, tipo: true, revision: true, estudio: true, fechaEstudio: true, estado: true, archivoId: true, publicadoEn: true, paciente: { select: { id: true, nombre: true } } } satisfies Prisma.InformeSelect;
 
 @Injectable()
 export class Results {
   constructor(private readonly db: Database, private readonly files: PrivateFiles, private readonly scanner: PdfScanner, @Inject(CONFIG) private readonly config: AppConfig) {}
   async list(dto: ListarDto, actor: Actor) {
     const buscar = dto.buscar?.trim();
-    const where: Prisma.InformeWhereInput = { ...scope(actor), estado: dto.estado, pacienteId: dto.pacienteId,
-      ...(buscar ? { OR: [{ paciente: { nombre: { contains: escaparComodinesLike(buscar), mode: 'insensitive' } } }, { estudio: { contains: escaparComodinesLike(buscar), mode: 'insensitive' } }] } : {}) };
+    const where: Prisma.InformeWhereInput = { ...scope(actor), tipo: dto.tipo, estado: dto.estado, pacienteId: dto.pacienteId,
+      ...(buscar ? coincideCon(buscar) : {}) };
     const [datos, total] = await this.db.$transaction([
       this.db.informe.findMany({ where, select: summary, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (dto.pagina - 1) * dto.limite, take: dto.limite }),
       this.db.informe.count({ where }),
@@ -88,6 +88,7 @@ export class Results {
     };
     const where: Prisma.InformeWhereInput = {
       ...PUBLICADO_CON_ACCESO,
+      tipo: dto.tipo,
       ...(Object.keys(acceso).length ? { acceso: { is: acceso } } : {}),
       ...(dto.informeId ? { id: dto.informeId } : {}),
       ...(dto.ids ? { id: { in: dto.ids } } : {}),
@@ -96,7 +97,7 @@ export class Results {
     const [filas, total] = await this.db.$transaction([
       this.db.informe.findMany({
         where,
-        select: { id: true, estudio: true, fechaEstudio: true, publicadoEn: true,
+        select: { id: true, tipo: true, estudio: true, fechaEstudio: true, publicadoEn: true,
           paciente: { select: { nombre: true, pac: true, ci: true } },
           acceso: { select: { id: true, expiraEn: true, revocadoEn: true, abiertoEn: true } } },
         orderBy: [{ publicadoEn: 'desc' }, { id: 'desc' }],
@@ -110,6 +111,7 @@ export class Results {
     return {
       datos: enOrden.map(fila => ({
         informeId: fila.id,
+        tipo: fila.tipo,
         paciente: fila.paciente,
         estudio: fila.estudio,
         fechaEstudio: fila.fechaEstudio,
@@ -137,15 +139,16 @@ export class Results {
    */
   async panoramaForCrm(dto: PanoramaCrmDto) {
     const ahora = new Date();
+    const publicados = { ...PUBLICADO_CON_ACCESO, tipo: dto.tipo };
     const trabajo: Prisma.InformeWhereInput = {
-      ...PUBLICADO_CON_ACCESO,
+      ...publicados,
       acceso: { is: { abiertoEn: null, ...segunVigencia(true, ahora) } },
     };
     const orden = [{ publicadoEn: 'desc' }, { id: 'desc' }] satisfies Prisma.InformeOrderByWithRelationInput[];
     const [todos, abiertos, vencidosSinAbrir, vigentes] = await this.db.$transaction([
-      this.db.informe.count({ where: PUBLICADO_CON_ACCESO }),
-      this.db.informe.count({ where: { ...PUBLICADO_CON_ACCESO, acceso: { is: { abiertoEn: { not: null } } } } }),
-      this.db.informe.count({ where: { ...PUBLICADO_CON_ACCESO, acceso: { is: { abiertoEn: null, ...segunVigencia(false, ahora) } } } }),
+      this.db.informe.count({ where: publicados }),
+      this.db.informe.count({ where: { ...publicados, acceso: { is: { abiertoEn: { not: null } } } } }),
+      this.db.informe.count({ where: { ...publicados, acceso: { is: { abiertoEn: null, ...segunVigencia(false, ahora) } } } }),
       this.db.informe.findMany({ where: trabajo, select: { id: true }, orderBy: orden, take: TOPE_TRABAJO_CRM + 1 }),
     ]);
     /* Aparte: sin búsqueda no hay nada que marcar. El CRM lo cruza con el

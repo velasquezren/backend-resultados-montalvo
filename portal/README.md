@@ -41,3 +41,15 @@ portal que genera el sistema. No registrar URLs completas de resultados.
 - GitHub Actions comprueba backend/PostgreSQL y compilación del portal en cada push/PR.
 
 Las pruebas de navegador de esta entrega usan solo pacientes/PDF sintéticos. Falta validar proveedores reales, HTTPS/dominio productivo y el flujo operativo con personal de la clínica antes de cargar documentos reales.
+
+## Preparación multítipo (23/10/2026, sin despliegue)
+
+El médico selecciona Ecografía, Papanicolau, Laboratorio u Otro estudio al crear
+el borrador; la lista filtra por tipo y estado y busca por paciente, PAC, CI o
+estudio. El tipo acompaña al informe y su vista del paciente. Una consulta fallida
+muestra error y reintento en vez de una lista vacía. El refresco comparte el mismo
+ciclo de carga y descarta respuestas de filtros anteriores. La búsqueda exacta
+permite elegir PAC o CI cuando el identificador resulta ambiguo.
+
+Requiere la API multítipo y su migración antes de publicar este portal. No cambia
+el acceso al PDF ni habilita envíos, IA o automatizaciones de WhatsApp.

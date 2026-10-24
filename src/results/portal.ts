@@ -46,7 +46,7 @@ export class PatientPortal {
     /* Los videos e imágenes se ven con el informe publicado, no antes: un
        borrador todavía puede cambiar de manos. */
     const adjuntos = report.estado === 'PUBLICADO' ? await this.adjuntos.listaParaPaciente(report.id) : [];
-    return { estado: report.estado, estudio: report.estudio, fechaEstudio: report.fechaEstudio, medico: report.medico.nombre,
+    return { tipo: report.tipo, estado: report.estado, estudio: report.estudio, fechaEstudio: report.fechaEstudio, medico: report.medico.nombre,
       disponible: report.estado === 'PUBLICADO', mensaje: report.estado === 'PUBLICADO' ? 'Tu informe está disponible. Puedes descargarlo.' : 'Estamos preparando tu informe. Puedes volver a consultar más adelante.',
       adjuntos };
   }

@@ -1,10 +1,12 @@
 "use client";
+import { reportTypeLabel } from '@/lib/types';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
 import { AdjuntoPaciente, dateLabel } from "@/lib/types";
 import PatientMedia from "./PatientMedia";
 type Result = {
   estudio: string;
+  tipo?: string;
   fechaEstudio: string;
   medico: string;
   disponible: boolean;
@@ -103,6 +105,7 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
               <i className="pac-punto" aria-hidden="true" />
               {estado.result.disponible ? "Listo para ver" : "Tu informe"}
             </span>
+            <p className="eyebrow">{reportTypeLabel(estado.result.tipo)}</p>
             <h1 className="pac-titulo">{estado.result.estudio}</h1>
             <p className="pac-meta">
               <span>{dateLabel(estado.result.fechaEstudio)}</span>

@@ -23,7 +23,7 @@ Un solo módulo Nest reúne estos servicios para evitar estructura ceremonial. N
 
 - CI/PAC únicos, búsqueda exacta y normalización conservadora. No se fusionan pacientes automáticamente.
 - `revision` exige actualización optimista para carga, publicación, renovación y retiro. Una operación desactualizada responde 409.
-- Archivo publicado inmutable. Se conserva historial de adjuntos; retirar no borra registros clínicos.
+- El portal no edita un PDF publicado. La integración FileMaker sí admite reemplazo auditado por la misma referencia y tipo, conservando los archivos anteriores; retirar no borra registros clínicos.
 - **Versión para ver (desde el 2026-09-29).** El 96-97 % del peso de un informe son las fotos de la ecografía, que FileMaker exporta en calidad máxima (3-5 MB por informe; medido en producción). El worker genera para cada informe publicado un `Archivo` nuevo con las fotos recomprimidas (JPEG calidad 80 con mozjpeg, mismas dimensiones; las que FileMaker 20.1 guarda sin pérdida también pasan a JPEG si son fotos grandes y bajan a menos de la mitad, no así logos ni gráficos; texto, fuentes y vectores byte a byte iguales; CMYK o espacios con perfil no se tocan). Queda en `Informe.archivoVistaId`, cifrado y verificado por SHA-256 como el original. Paciente y recepción ven esa versión (~60 % menos en un informe real, sin diferencia visible); el médico y «Descargar el original» reciben el publicado intacto. `null` = pendiente (se sirve el original); igual a `archivoId` = no valía la pena. La entrada desde FileMaker no cambia.
 - Publicación y auditoría se guardan en una transacción; dos publicaciones simultáneas dejan una sola.
 - Los instantes se almacenan como UTC; `fechaEstudio` es fecha clínica sin hora y se valida con el calendario de Bolivia. Quien la muestre debe formatearla en UTC, o en Bolivia aparece el día anterior.
@@ -97,3 +97,12 @@ La creación de borrador no tiene clave de idempotencia: ante respuesta perdida,
 3. Probar almacenamiento y antivirus reales, backup/restauración y acceso móvil. El envío por WhatsApp lo prueba el CRM con la plantilla aprobada.
 4. Activar producción con métricas y volumen limitado.
 5. Incorporar reservas/pagos como dominios separados cuando se validen sus reglas. No usar estados del informe para representar citas.
+
+## Clasificación de informes (preparada localmente el 23/10/2026)
+
+Ecografía, Papanicolau, laboratorio y otros estudios comparten el mismo ciclo de
+vida y permisos; `tipo` los clasifica sin crear tablas ni sistemas paralelos.
+La referencia de origen es única dentro de cada tipo. Los filtros y totales se
+resuelven en la base propietaria antes de paginar; el CRM no reclasifica por texto
+ni consulta sus tablas directamente. Contrato y despliegue pendiente en
+[API](api.md#tipos-clínicos-y-filemaker-23102026-preparado-localmente).

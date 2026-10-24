@@ -840,3 +840,84 @@ test('un retiro durante la lectura de bytes bloquea el PDF y no registra entrega
     assert.equal((await db.accesoPaciente.findUniqueOrThrow({ where: { id: r.acceso.id } })).abiertoEn, null);
   } finally { results.readFile = leer; delete process.env.CRM_AUTOSERVICIO_INFORMES; }
 });
+
+test('tipos clínicos: referencias independientes y reemplazo limitado al mismo módulo', async () => {
+  await db.limiteIntentos.deleteMany({});
+  const referencia = `MULTI-${randomUUID()}`;
+  const comunes = camposFileMaker({ pac: `PAC-${randomUUID().slice(0, 12)}`, referencia, publicar: 'true' });
+  const informes: string[] = [];
+  for (const tipo of ['ECOGRAFIA', 'PAPANICOLAU', 'LABORATORIO']) {
+    const campos = { ...comunes, tipo, estudio: `Estudio sintético ${tipo}` };
+    const primero = await desdeFileMaker(campos);
+    assert.equal(primero.status, 201);
+    assert.equal(primero.data.tipo, tipo);
+    informes.push(primero.data.informeId);
+    const repetido = await desdeFileMaker(campos);
+    assert.equal(repetido.data.informeId, primero.data.informeId);
+    assert.equal(repetido.data.repetido, true);
+  }
+  assert.equal(new Set(informes).size, 3);
+  const originalEco = await db.informe.findUniqueOrThrow({ where: { id: informes[0] } });
+  const document = await PDFDocument.create(); document.addPage([300, 400]);
+  const actualizado = await desdeFileMaker({ ...comunes, tipo: 'LABORATORIO', estudio: 'Estudio sintético LABORATORIO' }, undefined, Buffer.from(await document.save()));
+  assert.equal(actualizado.data.actualizado, true);
+  assert.equal(actualizado.data.informeId, informes[2]);
+  assert.equal((await db.informe.findUniqueOrThrow({ where: { id: informes[0] } })).archivoId, originalEco.archivoId);
+  // Los guiones antiguos que omiten tipo siguen actualizando su ecografía.
+  const legado = await desdeFileMaker({ ...comunes, estudio: 'Estudio sintético ECOGRAFIA' });
+  assert.equal(legado.data.informeId, informes[0]);
+
+  const crm = 'c'.repeat(40);
+  type Cola = { datos: Array<{ informeId: string; tipo: string }>; total: number };
+  const cola = await api<Cola>('/v1/integraciones/crm/informes?tipo=LABORATORIO&limite=1', 'GET', undefined, crm);
+  assert.equal(cola.status, 200);
+  assert.equal(cola.data.total, 1);
+  assert.deepEqual(cola.data.datos.map(i => i.informeId), [informes[2]]);
+  const panorama = await api<{ totales: { todos: number }; vigentesSinAbrir: string[] }>('/v1/integraciones/crm/informes/panorama?tipo=PAPANICOLAU', 'GET', undefined, crm);
+  assert.equal(panorama.data.totales.todos, 1);
+  assert.deepEqual(panorama.data.vigentesSinAbrir, [informes[1]]);
+  const lista = await api<{ datos: Array<{ id: string; tipo: string }>; total: number }>('/v1/informes?tipo=LABORATORIO', 'GET', undefined, medico);
+  assert.equal(lista.data.total, 1);
+  assert.equal(lista.data.datos[0]?.tipo, 'LABORATORIO');
+  assert.equal((await api<Cola>('/v1/integraciones/crm/informes?buscar=sint%C3%A9tico%20LABORATORIO', 'GET', undefined, crm)).data.total, 1);
+});
+
+test('FileMaker: tipo desconocido, publicación ambigua y referencia ausente se rechazan sin guardar', async () => {
+  const campos = camposFileMaker({ pac: `PAC-${randomUUID().slice(0, 12)}` });
+  const antes = await db.informe.count();
+  for (const extra of [{ tipo: 'DESCONOCIDO' }, { publicar: 'si' }, { tipo: 'PAPANICOLAU' }] as Record<string, string>[]) {
+    assert.equal((await desdeFileMaker({ ...campos, ...extra })).status, 400);
+  }
+  assert.equal(await db.informe.count(), antes);
+  for (const ruta of ['/v1/integraciones/crm/informes', '/v1/integraciones/crm/informes/panorama']) {
+    assert.equal((await api(`${ruta}?tipo=INVALIDO`, 'GET', undefined, 'c'.repeat(40))).status, 400);
+  }
+});
+
+test('FileMaker: PAC y CI de distintas fichas nunca adjuntan el PDF a una de ellas', async () => {
+  const suffix = randomUUID().slice(0, 12);
+  const uno = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Identidad sintética A', pac: `PAC-${suffix}` }, medico);
+  const dos = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Identidad sintética B', ci: `CI-${suffix}` }, medico);
+  assert.equal(uno.status, 201); assert.equal(dos.status, 201);
+  const antes = await db.informe.count();
+  const resultado = await desdeFileMaker(camposFileMaker({ pac: `PAC-${suffix}`, ci: `CI-${suffix}`, tipo: 'PAPANICOLAU', referencia: `ID-${suffix}` }));
+  assert.equal(resultado.status, 409);
+  assert.equal(await db.informe.count(), antes);
+  assert.equal(await db.informe.count({ where: { pacienteId: { in: [uno.data.id, dos.data.id] } } }), 0);
+});
+
+test('la búsqueda exacta ambigua exige elegir PAC o CI y respeta el alcance médico', async () => {
+  const valor = `AMB-${randomUUID().slice(0, 10)}`;
+  const a = await api<{ id: string }>('/v1/pacientes', 'POST', { nombre: 'Identidad sintética PAC', pac: valor }, medico);
+  await api('/v1/pacientes', 'POST', { nombre: 'Identidad sintética CI', ci: valor }, medico);
+  assert.equal((await api('/v1/pacientes/buscar', 'POST', { identificador: valor }, medico)).status, 409);
+  assert.equal((await api<{ id: string }>('/v1/pacientes/buscar', 'POST', { pac: valor }, medico)).data.id, a.data.id);
+  const nuevo = await api<Created>('/v1/informes', 'POST', { pacienteId: a.data.id, tipo: 'PAPANICOLAU', estudio: 'Citología sintética', fechaEstudio: '2026-01-05' }, medico);
+  assert.equal(nuevo.status, 201);
+  assert.equal((await api('/v1/informes', 'POST', { pacienteId: a.data.id, tipo: null, estudio: 'Citología sintética', fechaEstudio: '2026-01-05' }, medico)).status, 400);
+  const correo = `medico-${randomUUID().slice(0, 8)}@prueba.test`;
+  await app.get(AuthService).createUser(correo, 'Otro médico sintético', 'clave-sintetica-pruebas', 'MEDICO');
+  const sesion = await api<{ token: string }>('/v1/auth/login', 'POST', { email: correo, password: 'clave-sintetica-pruebas' });
+  assert.equal(sesion.status, 200);
+  assert.equal((await api(`/v1/informes/${nuevo.data.informe.id}`, 'GET', undefined, sesion.data.token)).status, 404);
+});

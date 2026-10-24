@@ -317,6 +317,8 @@ input[type="file"]::file-selector-button {
   gap: 24px;
 }
 .report-row div {
+  min-width: 0;
+  overflow-wrap: anywhere;
   flex: 1;
   display: flex;
   flex-direction: column;

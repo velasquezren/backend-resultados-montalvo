@@ -1,7 +1,7 @@
 "use client";
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '@/lib/client';
-import { Access, Config, Patient } from '@/lib/types';
+import { Access, Config, Patient, REPORT_TYPES } from '@/lib/types';
 import { Feedback, message, today } from './shared';
 export default function NewReport({
   config,
@@ -12,6 +12,7 @@ export default function NewReport({
   onCancel: () => void;
   onCreated: (id: string, access: Access) => Promise<void>;
 }) {
+  const [searchKind, setSearchKind] = useState("identificador");
   const [patient, setPatient] = useState<Patient | null>(null),
     [kind, setKind] = useState("ci"),
     [identifier, setIdentifier] = useState(""),
@@ -29,7 +30,7 @@ export default function NewReport({
     try {
       setPatient(
         await api<Patient>("v1/pacientes/buscar", "POST", {
-          identificador: identifier.trim(),
+          [searchKind]: identifier.trim(),
         }),
       );
     } catch (err) {
@@ -74,6 +75,7 @@ export default function NewReport({
         "POST",
         {
           pacienteId: patient.id,
+          tipo: form.get("tipo"),
           estudio: String(form.get("estudio")).trim(),
           fechaEstudio: form.get("fecha"),
         },
@@ -104,6 +106,17 @@ export default function NewReport({
       {!patient ? (
         <>
           <form onSubmit={search}>
+            <label>
+              Buscar por
+              <select value={searchKind} disabled={busy} onChange={e => {
+                setSearchKind(e.target.value); setRegister(false);
+                if (e.target.value !== 'identificador') setKind(e.target.value);
+              }}>
+                <option value="identificador">CI o PAC</option>
+                <option value="pac">Solo PAC</option>
+                <option value="ci">Solo CI / carnet</option>
+              </select>
+            </label>
             <label>
               CI o número PAC
               <input
@@ -178,6 +191,12 @@ export default function NewReport({
           </section>
           <form onSubmit={create}>
             <label>
+              Tipo de informe
+              <select name="tipo" defaultValue="ECOGRAFIA" disabled={!!created} required>
+                {Object.entries(REPORT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label>
               Nombre del estudio
               <input
                 name="estudio"
@@ -185,7 +204,7 @@ export default function NewReport({
                 required
                 minLength={3}
                 maxLength={160}
-                placeholder="Ej. Ecografía abdominal"
+                placeholder="Ej. Ecografía abdominal, citología o hemograma"
                 disabled={!!created}
               />
               <datalist id="estudios-frecuentes">

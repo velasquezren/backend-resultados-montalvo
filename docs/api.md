@@ -118,3 +118,56 @@ paciente si se envía. Retirarlo en Resultados no elimina una copia ya entregada
 La identificación civil del titular del número y los teléfonos compartidos son
 responsabilidad del procedimiento de vinculación del CRM; estas rutas no aportan
 un segundo factor ni autorización de tutores.
+
+
+## Tipos clínicos y FileMaker (23/10/2026, preparado localmente)
+
+`tipo` admite `ECOGRAFIA`, `PAPANICOLAU`, `LABORATORIO` u `OTRO`. Es una
+clasificación explícita; no se deduce del nombre del estudio. Omitirlo conserva
+`ECOGRAFIA` para los guiones actuales. `null` y tipos desconocidos se rechazan.
+La configuración médica expone `tipos`; el acceso del paciente es `ENLACE_DIRECTO`.
+
+- Crear desde el portal: POST `/v1/informes` admite `tipo` junto a los campos existentes.
+- Listar: GET `/v1/informes`, `/v1/integraciones/crm/informes` y
+  `/v1/integraciones/crm/informes/panorama` aceptan `?tipo=…`.
+- El filtro se aplica en SQL antes de contar y paginar; los totales del panorama
+  corresponden al tipo elegido y siguen siendo independientes del texto buscado.
+- Las filas médicas, del CRM, la respuesta de FileMaker y el detalle del paciente
+  incluyen `tipo`. La búsqueda de informes admite paciente, PAC, CI o estudio.
+- Buscar paciente con `identificador` responde 409 si coincide con el PAC de una
+  ficha y el CI de otra. Se debe indicar `pac` o `ci` explícitamente.
+
+POST `/v1/integraciones/filemaker/informe`, Bearer `FILEMAKER_API_TOKEN`,
+`multipart/form-data`: conserva `archivo`, `nombre`, `pac`/`ci`, `fechaEstudio`,
+`medico`, `estudio`, `referencia`, `publicar` y añade `tipo`. No usa credenciales
+ni tablas del CRM. El PDF conserva los límites, antivirus y almacenamiento privado.
+
+Para Papanicolau/laboratorio se exige `referencia` estable (1–80 caracteres,
+letras, cifras, punto, guion, guion bajo o dos puntos). La clave es ahora
+`(tipo, referenciaExterna)`: `PAPANICOLAU/123` y `ECOGRAFIA/123` son distintos.
+Dentro del mismo tipo, archivos FileMaker diferentes deben usar prefijos propios,
+por ejemplo `CITOLOGIA:123` o `LAB:123`. No usar fecha, nombre ni teléfono como clave.
+El [guion de Papanicolau](filemaker-papanicolau.md) está preparado con los campos
+de las capturas; falta confirmación del mapeo y prueba dentro de FileMaker.
+El guion de laboratorio espera sus propias capturas y campos.
+
+Repetir tipo+referencia conserva el informe, su enlace y el historial. Si cambian
+los bytes, reemplaza el PDF actual, invalida la vista liviana y audita el cambio.
+Si no cambian, no agrega otro archivo. No renueva el enlace ni vuelve a avisar
+por WhatsApp. Se rechazan referencias retiradas o que cambien de paciente,
+médico, fecha o estudio. PAC y CI deben coincidir con una única ficha existente;
+un identificador adicional no registrado requiere corregir la identidad antes
+(o enviar solo el identificador ya confirmado), nunca se fusiona automáticamente.
+
+`publicar` acepta únicamente `true`/`false` (booleano o texto multipart), no valores
+como «sí». Por omisión queda en borrador. Publicar no envía WhatsApp: entra en la
+cola del CRM y conserva su autorización de entrega. Esta ampliación no enruta
+laboratorios a CLIMON automáticamente.
+
+**Publicación pendiente:** aplicar primero la migración
+`20261023120000_tipos_informe_referencia` y desplegar API Resultados; después CRM
+backend, portal Next y Angular. No publicar Angular con un backend antiguo.
+La migración conserva tipos/referencias existentes y añade índice para las colas.
+No se ha aplicado a producción. Antes de revertir a una API anterior, comprobar
+si ya existen referencias iguales en tipos distintos: la unicidad global antigua
+no puede restaurarse en ese caso sin una conciliación explícita.

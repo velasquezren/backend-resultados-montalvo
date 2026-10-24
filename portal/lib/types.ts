@@ -1,3 +1,8 @@
+export const REPORT_TYPES = { ECOGRAFIA: 'Ecografía', PAPANICOLAU: 'Papanicolau', LABORATORIO: 'Laboratorio', OTRO: 'Otro estudio' } as const;
+export type ReportType = keyof typeof REPORT_TYPES;
+export function reportTypeLabel(tipo?: string): string {
+  return tipo && Object.hasOwn(REPORT_TYPES, tipo) ? REPORT_TYPES[tipo as ReportType] : 'Informe clínico';
+}
 export type User = {
   id: string;
   nombre: string;
@@ -17,6 +22,7 @@ export type Access = {
 };
 /** Lo que devuelve la lista: solo lo que se pinta en cada fila. */
 export type ReportSummary = {
+  tipo: ReportType;
   id: string;
   revision: number;
   estudio: string;
@@ -39,6 +45,7 @@ export type Adjunto = {
 /** Lo que ve el paciente de cada adjunto: sin el nombre del archivo. */
 export type AdjuntoPaciente = Pick<Adjunto, "id" | "tipo" | "mime" | "bytes">;
 export type Report = {
+  tipo: ReportType;
   id: string;
   revision: number;
   estudio: string;

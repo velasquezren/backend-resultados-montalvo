@@ -10,6 +10,7 @@ import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { normalizeId } from './patients';
 import { fechaDeEstudio, vencimiento } from './results';
+import { ESTUDIO_PREDETERMINADO } from './tipos';
 
 /**
  * La credencial, comprobada en un GUARD y no dentro del handler.
@@ -31,7 +32,6 @@ export class FileMakerGuard implements CanActivate {
 }
 
 /** FileMaker crea el informe o sustituye su PDF por la misma referencia. */
-const ESTUDIO_POR_DEFECTO = 'Ecografía';
 
 @Injectable()
 export class FileMakerIntake {
@@ -43,6 +43,8 @@ export class FileMakerIntake {
   ) {}
 
   async recibir(dto: FileMakerInformeDto, buffer: Buffer) {
+    const tipo = dto.tipo ?? 'ECOGRAFIA';
+    if (tipo !== 'ECOGRAFIA' && !dto.referencia) problem(400, 'REFERENCIA_REQUERIDA', 'Envía el identificador estable del registro para actualizar este informe sin duplicarlo.');
     /* El informe es de un médico concreto: es quien lo verá en su portal.
        FileMaker puede no tener ese dato a mano, así que se admite uno por
        defecto del servidor — con el coste de que todos caigan en esa cuenta. */
@@ -70,9 +72,9 @@ export class FileMakerIntake {
       const resultado = await this.db.$transaction(async tx => {
         // Serializa también el primer envío: dos pulsaciones no crean duplicados.
         if (dto.referencia) {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'filemaker:informe:' + dto.referencia}, 0))`;
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'filemaker:informe:' + tipo + ':' + dto.referencia}, 0))`;
           const previo = await tx.informe.findUnique({
-            where: { referenciaExterna: dto.referencia },
+            where: { tipo_referenciaExterna: { tipo, referenciaExterna: dto.referencia } },
             include: { paciente: true, archivo: true },
           });
           if (previo) {
@@ -109,7 +111,7 @@ export class FileMakerIntake {
         }
         const paciente = await this.pacienteDe(tx, dto, medico.id);
         const creado = await tx.informe.create({
-          data: { pacienteId: paciente.id, medicoId: medico.id, estudio: dto.estudio?.trim() || ESTUDIO_POR_DEFECTO, fechaEstudio: fecha, referenciaExterna: dto.referencia ?? null },
+          data: { tipo, pacienteId: paciente.id, medicoId: medico.id, estudio: dto.estudio?.trim() || ESTUDIO_PREDETERMINADO[tipo], fechaEstudio: fecha, referenciaExterna: dto.referencia ?? null },
         });
         const archivo = await tx.archivo.create({ data: { informeId: creado.id, clave, bytes: buffer.length, ...validacion.value } });
         /* Publicar aquí y no llamando a `Results.publish` porque todo nace en
@@ -140,7 +142,11 @@ export class FileMakerIntake {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identificador}, 0))`;
     }
     const buscar = { OR: [...(pac ? [{ pac }] : []), ...(ci ? [{ ci }] : [])] };
-    const encontrado = await tx.paciente.findFirst({ where: buscar });
+    const encontrados = await tx.paciente.findMany({ where: buscar, take: 2 });
+    const encontrado = encontrados[0];
+    if (encontrados.length > 1 || (encontrado && ((pac && encontrado.pac !== pac) || (ci && encontrado.ci !== ci)))) {
+      problem(409, 'IDENTIDAD_PACIENTE_CONFLICTIVA', 'El PAC y el CI no coinciden con una única ficha. Revisa los identificadores antes de enviar el informe.');
+    }
     if (encontrado) return encontrado;
     const nuevo = await tx.paciente.create({ data: { nombre: dto.nombre.trim(), pac, ci } });
     await tx.auditoria.create({ data: { actorId, accion: 'PACIENTE_REGISTRADO' } });
@@ -148,7 +154,7 @@ export class FileMakerIntake {
   }
 
   private readonly seleccion = {
-    id: true, estado: true, estudio: true, fechaEstudio: true,
+    id: true, tipo: true, estado: true, estudio: true, fechaEstudio: true,
     paciente: { select: { id: true, nombre: true, ci: true, pac: true } },
     acceso: { select: { id: true, expiraEn: true } },
     archivo: { select: { paginas: true, bytes: true } },
@@ -157,6 +163,7 @@ export class FileMakerIntake {
   private respuesta(informe: Prisma.InformeGetPayload<{ select: FileMakerIntake['seleccion'] }>, repetido: boolean, actualizado: boolean) {
     return {
       informeId: informe.id,
+      tipo: informe.tipo,
       estado: informe.estado,
       /** `true` = se reutilizó el mismo informe y enlace. */
       repetido,

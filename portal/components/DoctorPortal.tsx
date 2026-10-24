@@ -1,7 +1,7 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/client';
-import { Access, Config, Report, ReportSummary, User, dateLabel, reportLabels } from '@/lib/types';
+import { Access, Config, Report, ReportSummary, User, dateLabel, reportLabels, REPORT_TYPES, reportTypeLabel } from '@/lib/types';
 import NewReport from './NewReport';
 import ReportDetail from './ReportDetail';
 import NewUser from './NewUser';
@@ -13,6 +13,9 @@ export default function DoctorPortal() {
     [checking, setChecking] = useState(true),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
+  const [tipo, setTipo] = useState("");
+  const [listError, setListError] = useState("");
+  const [reload, setReload] = useState(0);
   const [query, setQuery] = useState(""),
     [search, setSearch] = useState(""),
     [opening, setOpening] = useState<string | null>(null);
@@ -29,21 +32,15 @@ export default function DoctorPortal() {
   // Una sola definición de la consulta: antes el efecto y `refresh` la repetían.
   const listPath = useCallback(
     () =>
-      `v1/informes?pagina=${page}&limite=15${state ? `&estado=${state}` : ""}${search ? `&buscar=${encodeURIComponent(search)}` : ""}`,
-    [page, state, search],
+      `v1/informes?pagina=${page}&limite=15${tipo ? `&tipo=${tipo}` : ""}${state ? `&estado=${state}` : ""}${search ? `&buscar=${encodeURIComponent(search)}` : ""}`,
+    [page, state, search, tipo],
   );
-  const refresh = useCallback(async () => {
-    const result = await api<{ datos: ReportSummary[]; total: number }>(
-      listPath(),
-    );
-    setReports(result.datos);
-    setTotal(result.total);
-  }, [listPath]);
+  const refresh = useCallback(async () => { setReload(value => value + 1); }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearch((previous) => {
         if (previous !== query.trim()) setPage(1);
-        return query.trim();
+        return query.trim().length >= 2 ? query.trim() : "";
       });
     }, 300);
     return () => clearTimeout(timer);
@@ -83,6 +80,7 @@ export default function DoctorPortal() {
     if (!user) return;
     let active = true;
     setLoading(true);
+    setListError("");
     api<{ datos: ReportSummary[]; total: number }>(listPath())
       .then((list) => {
         if (active) {
@@ -91,7 +89,7 @@ export default function DoctorPortal() {
         }
       })
       .catch((err) => {
-        if (active) setError(message(err));
+        if (active) setListError(message(err));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -99,7 +97,7 @@ export default function DoctorPortal() {
     return () => {
       active = false;
     };
-  }, [user, listPath]);
+  }, [user, listPath, reload]);
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -256,14 +254,21 @@ export default function DoctorPortal() {
               <input
                 type="search"
                 value={query}
-                placeholder="Nombre del paciente o estudio"
+                placeholder="Paciente, PAC, CI o estudio"
                 autoComplete="off"
                 maxLength={160}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
             <label>
-              Mostrar
+              Tipo de informe
+              <select value={tipo} onChange={event => { setTipo(event.target.value); setPage(1); }}>
+                <option value="">Todos los tipos</option>
+                {Object.entries(REPORT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label>
+              Estado
               <select
                 value={state}
                 onChange={(e) => {
@@ -296,19 +301,25 @@ export default function DoctorPortal() {
             <div className="empty" role="status">
               Cargando tus informes…
             </div>
+          ) : listError ? (
+            <div className="empty" role="alert">
+              <h2>No se pudieron cargar los informes</h2>
+              <p>{listError}</p>
+              <button onClick={() => void refresh()}>Reintentar</button>
+            </div>
           ) : reports.length === 0 ? (
             <div className="empty">
               <h2>
                 {search
                   ? `Sin resultados para “${search}”`
-                  : state
-                    ? "No hay informes con este estado"
+                  : (state || tipo)
+                    ? "No hay informes con estos filtros"
                     : "Todavía no hay informes"}
               </h2>
               <p>
                 {search
                   ? "Prueba con otra parte del nombre o cambia el filtro de estado."
-                  : state
+                  : (state || tipo)
                     ? "Prueba otro filtro o crea un nuevo informe."
                     : "Empieza identificando al paciente y adjuntando su PDF."}
               </p>
@@ -325,7 +336,7 @@ export default function DoctorPortal() {
                   <div>
                     <strong>{report.paciente.nombre}</strong>
                     <span>
-                      {report.estudio} · {dateLabel(report.fechaEstudio)}
+                      {reportTypeLabel(report.tipo)} · {report.estudio} · {dateLabel(report.fechaEstudio)}
                     </span>
                   </div>
                   <span className={`status estado-${report.estado.toLowerCase()}`}>
@@ -338,7 +349,7 @@ export default function DoctorPortal() {
               ))}
             </div>
           )}
-          <div className="pagination">
+          {!listError && <div className="pagination">
             <span>
               {total} informes · Página {page}
             </span>
@@ -354,7 +365,7 @@ export default function DoctorPortal() {
             >
               Siguiente
             </button>
-          </div>
+          </div>}
         </>
       )}
     </div>

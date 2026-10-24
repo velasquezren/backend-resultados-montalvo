@@ -1,5 +1,27 @@
 # Contexto de continuidad — Montalvo
 
+> **24/10/2026 — continuación de informes multítipo, sin despliegue.** El trabajo
+> de API/portal Resultados, backend CRM y Angular se conserva en la rama
+> `feat/informes-multitipo` de los tres repositorios, basada en sus respectivos
+> `main` actualizados. No confundir tener el código en GitHub con producción.
+> Incluye filtros ECOGRAFIA/PAPANICOLAU/LABORATORIO/OTRO, referencias por tipo,
+> comprobación de identidad y mejoras de la cola. Contrato y orden de despliegue
+> en [API](docs/api.md#tipos-clínicos-y-filemaker-23102026-preparado-localmente).
+>
+> El [guion completo de Papanicolau](docs/filemaker-papanicolau.md) se prepara en
+> **generar pdf 2**, sin cambiar Toggle. Falta confirmar el PAC contenido en
+> `rkey pac`, la fecha y la cuenta médica; no se ejecutó en FileMaker. Usa la
+> referencia estable `PAP:pkey`. René continuará con laboratorio y proporcionará
+> sus capturas: no inventar campos ni reutilizar este mapeo automáticamente.
+> Token PDF, secretos y capturas clínicas no viajan con Git.
+>
+> Validación local del 23/10: 187 pruebas y builds de las cuatro aplicaciones
+> aprobados. Base de pruebas aislada, sin PDFs de pacientes. Migración
+> `20261023120000_tipos_informe_referencia` pendiente en producción. Publicar
+> primero API Resultados y CRM backend; luego los frontends. Un push a `main`
+> de Angular activa Vercel: mantener esta rama hasta coordinar ese orden.
+
+
 > **16/10/2026 — corrección de apertura de PDFs DESPLEGADA (`caa9a28`).** La
 > captura Android muestra el 401 del proxy por falta de cookie, no evidencia de
 > PDF corrupto. Los botones publicados apuntaban a rutas genéricas sin renovar

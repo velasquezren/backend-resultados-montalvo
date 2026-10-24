@@ -21,6 +21,7 @@ import { Results } from './results/results';
 import { InformesChat } from './results/informes-chat';
 import { InformesPacienteCrmDto, PdfPacienteCrmDto } from './dto';
 import { FileMakerGuard, FileMakerIntake } from './results/filemaker';
+import { TIPOS_INFORME } from './results/tipos';
 
 function fileResponse(response: Response, file: Buffer, disposition: 'inline' | 'attachment' = 'attachment'): void {
   response.setHeader('Content-Type', 'application/pdf');
@@ -106,7 +107,7 @@ export class PatientsController {
 @Controller('v1/informes')
 export class ResultsController {
   constructor(private readonly results: Results, private readonly adjuntos: Adjuntos, private readonly attempts: Attempts) {}
-  @Get('configuracion') async configuration() { return { tipo: 'ECOGRAFIA', maxPdfBytes: MAX_PDF_BYTES, maxAdjuntoBytes: MAX_ADJUNTO_BYTES, maxAdjuntos: MAX_ADJUNTOS_POR_INFORME, accesoPaciente: 'CODIGO_ENTREGADO_EN_CLINICA', estudiosFrecuentes: await this.results.studyNames() }; }
+  @Get('configuracion') async configuration() { return { tipo: 'ECOGRAFIA', tipos: TIPOS_INFORME, maxPdfBytes: MAX_PDF_BYTES, maxAdjuntoBytes: MAX_ADJUNTO_BYTES, maxAdjuntos: MAX_ADJUNTOS_POR_INFORME, accesoPaciente: 'ENLACE_DIRECTO', estudiosFrecuentes: await this.results.studyNames() }; }
   @Get() list(@Query() dto: ListarDto, @Req() req: AuthRequest) { return this.results.list(dto, req.actor); }
   @Post() create(@Body() dto: CrearInformeDto, @Req() req: AuthRequest) { return this.results.create(dto, req.actor); }
   @Get(':id') get(@Param('id', ParseUUIDPipe) id: string, @Req() req: AuthRequest) { return this.results.get(id, req.actor); }
