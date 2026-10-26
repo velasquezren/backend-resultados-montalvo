@@ -42,7 +42,7 @@ API predeterminada: puerto 3010. `/health` comprueba proceso; `/health/ready` co
 
 `STORAGE_DRIVER=local` guarda PDFs en `var/private`, fuera de recursos públicos. Sin ClamAV solo se permite desarrollo; producción exige R2 privado o `STORAGE_DRIVER=local-encrypted` con clave AES-256-GCM y `CLAMAV_HOST`. Nunca usar PDFs clínicos reales en desarrollo sin el entorno adecuado.
 
-Los cambios multítipo del 23/10/2026 están preparados localmente, sin despliegue.
+Los cambios multítipo del 23/10/2026 están desplegados desde el 25/10/2026 (`4cb6ada`).
 Contrato y orden de publicación en [API](docs/api.md#tipos-clínicos-y-filemaker-23102026-preparado-localmente).
 
 ## Flujo ya disponible

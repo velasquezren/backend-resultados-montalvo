@@ -122,6 +122,8 @@ un segundo factor ni autorización de tutores.
 
 ## Tipos clínicos y FileMaker (23/10/2026, preparado localmente)
 
+**Desplegado el 25/10/2026** (`4cb6ada`, migración `20261023120000_tipos_informe_referencia`).
+
 `tipo` admite `ECOGRAFIA`, `PAPANICOLAU`, `LABORATORIO` u `OTRO`. Es una
 clasificación explícita; no se deduce del nombre del estudio. Omitirlo conserva
 `ECOGRAFIA` para los guiones actuales. `null` y tipos desconocidos se rechazan.

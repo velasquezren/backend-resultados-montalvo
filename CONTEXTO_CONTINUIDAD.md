@@ -1,5 +1,19 @@
 # Contexto de continuidad — Montalvo
 
+> **25/10/2026, 20:39 La Paz — informes multítipo DESPLEGADOS (`4cb6ada`).**
+> Release `/opt/montalvo-resultados/releases/20261025-multitipo-4cb6ada` con API,
+> worker y portal propios (portal compilado con `--webpack` como `resultados-web`;
+> `20-pdf-cache.conf` apunta a su `.next/cache`). Migración
+> `20261023120000_tipos_informe_referencia` aplicada: 227 informes, todos
+> ECOGRAFIA, referencias sin duplicados. Respaldo y reversión en
+> `/root/backup-resultados-20261025-203601-multitipo/` (`revertir.sh` vuelve al
+> release del 13/10; la migración es compatible con él). En el VPS: 22 unitarias,
+> 21 del portal y builds aprobados; `/health/ready` 200, panorama y listado
+> filtran por `tipo` y un tipo desconocido da 400; HTTPS del portal 200. Luego se
+> desplegaron CRM `d22ef19` y Angular `7893a4e`. Los guiones de Papanicolau y
+> laboratorio en FileMaker siguen pendientes. Disco del VPS al 90 %: 16 GB en
+> `/root/backups-resultados` (sin retención) y 20 GB en releases anteriores.
+
 > **24/10/2026 — continuación de informes multítipo, sin despliegue.** El trabajo
 > de API/portal Resultados, backend CRM y Angular se conserva en la rama
 > `feat/informes-multitipo` de los tres repositorios, basada en sus respectivos
