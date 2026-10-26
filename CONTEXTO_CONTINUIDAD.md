@@ -11,8 +11,11 @@
 > 21 del portal y builds aprobados; `/health/ready` 200, panorama y listado
 > filtran por `tipo` y un tipo desconocido da 400; HTTPS del portal 200. Luego se
 > desplegaron CRM `d22ef19` y Angular `7893a4e`. Los guiones de Papanicolau y
-> laboratorio en FileMaker siguen pendientes. Disco del VPS al 90 %: 16 GB en
-> `/root/backups-resultados` (sin retención) y 20 GB en releases anteriores.
+> laboratorio en FileMaker siguen pendientes. El mismo día se borraron 23
+> releases antiguos (~19 GB); quedan `20261025` (actual), `20261013` (reversión)
+> y `20261016` (portal de esa reversión). Disco: 59 %. Sigue sin retención
+> `/root/backups-resultados` (16 GB). El `revertir.sh` del 16/10 quedó obsoleto
+> (apuntaba a un release borrado); usar el del 25/10.
 
 > **24/10/2026 — continuación de informes multítipo, sin despliegue.** El trabajo
 > de API/portal Resultados, backend CRM y Angular se conserva en la rama
