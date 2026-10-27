@@ -87,7 +87,10 @@ Este proyecto no expone webhook de WhatsApp: el único receptor de eventos de Me
 
 **Revisión desde el CRM (desde el 2026-09-29).** POST `/v1/integraciones/crm/informes/:id/revision` (credencial CRM) → `{url, expiraEn}`: un enlace al visor del portal, `<origen>/revision/<informeId>.<vence>.<firma>`, firmado con `SESSION_HMAC_KEY` y un prefijo propio, válido 10 minutos y solo para informes publicados (404 si no). El portal carga el PDF con GET `/v1/revision/<enlace>/pdf` —público; la firma es la credencial, 401 si no vale o venció, 404 si se retiró—, `inline`, versión liviana, auditado como `PDF_REVISADO_CRM` y **sin tocar `abiertoEn`**. El CRM recibe el enlace, nunca el PDF: la ruta anterior `GET /v1/integraciones/crm/informes/:id/pdf` se retiró.
 
-## Autoconsulta de informes por WhatsApp — local, apagada
+## Autoconsulta de informes por WhatsApp
+
+Desplegada el 13/10/2026 (`1604ded`) y activa en producción con
+`CRM_AUTOSERVICIO_INFORMES=on`; el CRM la ofrece en Prueba y Recepción.
 
 Estas rutas son exclusivas de la integración servidor–servidor del CRM, con el
 `CRM_INTEGRATION_TOKEN` existente y `CRM_AUTOSERVICIO_INFORMES=on`. Sin ese permiso
@@ -120,7 +123,7 @@ responsabilidad del procedimiento de vinculación del CRM; estas rutas no aporta
 un segundo factor ni autorización de tutores.
 
 
-## Tipos clínicos y FileMaker (23/10/2026, preparado localmente)
+## Tipos clínicos y FileMaker
 
 **Desplegado el 25/10/2026** (`4cb6ada`, migración `20261023120000_tipos_informe_referencia`).
 
@@ -166,10 +169,10 @@ como «sí». Por omisión queda en borrador. Publicar no envía WhatsApp: entra
 cola del CRM y conserva su autorización de entrega. Esta ampliación no enruta
 laboratorios a CLIMON automáticamente.
 
-**Publicación pendiente:** aplicar primero la migración
-`20261023120000_tipos_informe_referencia` y desplegar API Resultados; después CRM
+**Orden de publicación** (así se desplegó el 25/10): migración
+`20261023120000_tipos_informe_referencia` y API Resultados; después CRM
 backend, portal Next y Angular. No publicar Angular con un backend antiguo.
 La migración conserva tipos/referencias existentes y añade índice para las colas.
-No se ha aplicado a producción. Antes de revertir a una API anterior, comprobar
+Antes de revertir a una API anterior, comprobar
 si ya existen referencias iguales en tipos distintos: la unicidad global antigua
 no puede restaurarse en ese caso sin una conciliación explícita.

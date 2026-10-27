@@ -60,14 +60,14 @@ Hasta el 2026-09-22 el vínculo era una columna `referenciaCrm` derivada del PAC
 
 El CRM lleva él mismo la cuenta de a quién avisó (`AvisoResultado`, con índice único por informe contra el doble envío). No se comparten tablas ni se hacen joins entre bases.
 
-## Autoconsulta por WhatsApp (local, apagada)
+## Autoconsulta por WhatsApp (activa desde el 13/10/2026)
 
 `results/informes-chat.ts` ofrece al CRM una lista exacta por PAC y el PDF original
 seleccionado. Ambas rutas privadas requieren el token CRM y la bandera
 `CRM_AUTOSERVICIO_INFORMES=on`. No se publican en Next. Solo sirven informes
 publicados con acceso vigente y archivo original coincidente; comprueban CI si
 está disponible en ambos lados y revalidan antes/después de leer los bytes.
-Contrato completo en [API](api.md#autoconsulta-de-informes-por-whatsapp--local-apagada).
+Contrato completo en [API](api.md#autoconsulta-de-informes-por-whatsapp).
 
 Esta es una excepción explícita al transporte exclusivo de enlaces: el paciente
 pide una copia para su WhatsApp. El CRM la transfiere a Meta en memoria, sin
@@ -98,11 +98,11 @@ La creación de borrador no tiene clave de idempotencia: ante respuesta perdida,
 4. Activar producción con métricas y volumen limitado.
 5. Incorporar reservas/pagos como dominios separados cuando se validen sus reglas. No usar estados del informe para representar citas.
 
-## Clasificación de informes (preparada localmente el 23/10/2026)
+## Clasificación de informes (desplegada el 25/10/2026)
 
 Ecografía, Papanicolau, laboratorio y otros estudios comparten el mismo ciclo de
 vida y permisos; `tipo` los clasifica sin crear tablas ni sistemas paralelos.
 La referencia de origen es única dentro de cada tipo. Los filtros y totales se
 resuelven en la base propietaria antes de paginar; el CRM no reclasifica por texto
-ni consulta sus tablas directamente. Contrato y despliegue pendiente en
-[API](api.md#tipos-clínicos-y-filemaker-23102026-preparado-localmente).
+ni consulta sus tablas directamente. Contrato en
+[API](api.md#tipos-clínicos-y-filemaker).

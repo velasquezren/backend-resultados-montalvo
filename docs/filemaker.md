@@ -1,5 +1,11 @@
 # Entrada desde FileMaker
 
+> Guion de **ecografía**, el que está en uso. Desde el 25/10 la entrada admite
+> `tipo` (`ECOGRAFIA` por omisión, `PAPANICOLAU`, `LABORATORIO`, `OTRO`) y la
+> `referencia` es única **dentro de cada tipo**. Otros tipos: contrato en
+> [API](api.md#tipos-clínicos-y-filemaker) y guion de
+> [Papanicolau](filemaker-papanicolau.md).
+
 El médico pulsa un botón en FileMaker y el informe queda montado en el portal,
 **en borrador**, con el PDF adjunto. Una sola llamada.
 

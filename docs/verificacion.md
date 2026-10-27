@@ -1,5 +1,10 @@
 # Verificación de entrega
 
+> **Evidencia histórica de la primera entrega (21/09/2026).** Sus conteos y
+> el «transporte Meta» simulado son de entonces: el WhatsApp propio se retiró el
+> 22/09 y hoy avisa el CRM. Cómo verificar ahora: sección *Verificación* del
+> [README](../README.md); estado vigente en [CONTEXTO_CONTINUIDAD](../CONTEXTO_CONTINUIDAD.md).
+
 21 de septiembre de 2026. Código verificado en entorno local aislado, sin acceso a datos del CRM.
 
 - Compilación TypeScript estricta y generación Prisma: correctas.
