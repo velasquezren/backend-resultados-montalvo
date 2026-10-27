@@ -13,8 +13,9 @@
 > desplegaron CRM `d22ef19` y Angular `7893a4e`. Los guiones de Papanicolau y
 > laboratorio en FileMaker siguen pendientes. El mismo día se borraron 23
 > releases antiguos (~19 GB); quedan `20261025` (actual), `20261013` (reversión)
-> y `20261016` (portal de esa reversión). Disco: 59 %. Sigue sin retención
-> `/root/backups-resultados` (16 GB). El `revertir.sh` del 16/10 quedó obsoleto
+> y `20261016` (portal de esa reversión). El 26/10: respaldo externo nocturno en
+> `gs://crm-clinica-montalvo-respaldos` y copias locales `/root/backups-resultados`
+> con retención de 7 días. El `revertir.sh` del 16/10 quedó obsoleto
 > (apuntaba a un release borrado); usar el del 25/10.
 
 > **24/10/2026 — continuación de informes multítipo, sin despliegue.** El trabajo
@@ -87,8 +88,8 @@
 > informe (también ya publicado) y el paciente los ve, guarda y comparte desde
 > su enlace. Tabla `Adjunto`, cifrado por trozos `MNTV2`, ClamAV y Apache con
 > límites de 110 MB. Detalle en [arquitectura](docs/arquitectura.md#videos-e-imágenes-del-informe)
-> y [operación](docs/operacion.md#videos-e-imágenes). **Pendiente de OK:**
-> retención de 14 días en las copias diarias (hoy no se borra ninguna).
+> y [operación](docs/operacion.md#videos-e-imágenes). Retención de las copias
+> locales: 7 días desde el 26/10 (ver la entrada del 25/10 arriba).
 
 > **Actualización 23 de septiembre de 2026 — manda sobre todo lo de abajo.**
 >

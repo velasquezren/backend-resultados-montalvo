@@ -13,10 +13,13 @@ sha256sum "$DEST/base.dump.enc" "$DEST/archivos.tar.enc" > "$DEST/SHA256SUMS"
 openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/etc/montalvo-resultados/backup.key -in "$DEST/base.dump.enc" | pg_restore --list > /dev/null
 openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/etc/montalvo-resultados/backup.key -in "$DEST/archivos.tar.enc" | tar -tf - > /dev/null
 printf 'Copia verificada: %s\n' "$DEST"
-# Catorce días. Cada copia lleva TODOS los archivos —también los videos del
-# informe, de hasta 100 MB—, y sin retención el disco que se comparte con el
-# CRM se llena en semanas. Solo borra carpetas con el nombre de una copia.
-find /root/backups-resultados -mindepth 1 -maxdepth 1 -type d -name '20*T*Z' -mtime +13 -exec rm -rf {} +
+# Siete días (autorizado el 2026-10-26). Cada copia lleva TODOS los archivos
+# —también los videos del informe, de hasta 100 MB—, y sin retención el disco
+# que se comparte con el CRM se llena en semanas. Lo histórico queda en el
+# respaldo externo (gs://crm-clinica-montalvo-respaldos, ver respaldo-externo.sh
+# del CRM). Solo corre si la copia de hoy se verificó (set -e) y solo borra
+# carpetas con el nombre de una copia.
+find /root/backups-resultados -mindepth 1 -maxdepth 1 -type d -name '20*T*Z' -mtime +6 -exec rm -rf {} +
 BACKUP
 chmod 0700 /usr/local/sbin/montalvo-resultados-backup
 cat > /etc/systemd/system/resultados-backup.service <<'UNIT'
