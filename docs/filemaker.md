@@ -4,7 +4,7 @@
 > `tipo` (`ECOGRAFIA` por omisión, `PAPANICOLAU`, `LABORATORIO`, `OTRO`) y la
 > `referencia` es única **dentro de cada tipo**. Otros tipos: contrato en
 > [API](api.md#tipos-clínicos-y-filemaker) y guion de
-> [Papanicolau](filemaker-papanicolau.md).
+> [Papanicolau](filemaker-papanicolau.md) y [laboratorio](filemaker-laboratorio.md).
 
 El médico pulsa un botón en FileMaker y el informe queda montado en el portal,
 **en borrador**, con el PDF adjunto. Una sola llamada.

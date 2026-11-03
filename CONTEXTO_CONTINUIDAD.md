@@ -30,13 +30,14 @@ comprobar su estado: esto es una foto, no una garantía.
   `CRM_AUTOSERVICIO_INFORMES=on`: el CRM ofrece «Mis informes» en Prueba y Recepción.
 - **FileMaker:** el guion de ecografía está en uso ([filemaker.md](docs/filemaker.md)).
   Papanicolau tiene guion preparado y no ejecutado ([filemaker-papanicolau.md](docs/filemaker-papanicolau.md));
-  laboratorio espera las capturas de René. Contrato en [api.md](docs/api.md).
+  laboratorio quedó configurado y probado el 26/10 ([filemaker-laboratorio.md](docs/filemaker-laboratorio.md)).
+  Falta registrar la aceptación del primer envío real desde el botón. Contrato en [api.md](docs/api.md).
 - **Respaldos:** copia local cifrada diaria (`resultados-backup.timer`, 03:15,
   retiene 7 días en `/root/backups-resultados`) y respaldo externo nocturno en
   `gs://crm-clinica-montalvo-respaldos` (volcado cifrado con age, PDF
   incrementales; ver `respaldo-externo.sh` y §4 de la guía de infraestructura
   del CRM). Restauración externa probada el 26/10.
-- **Pendiente:** guiones de FileMaker de Papanicolau y laboratorio; dominio
+- **Pendiente:** ejecutar y validar Papanicolau, aceptación clínica del botón de laboratorio; dominio
   propio en vez de `nip.io` (exige editar la plantilla de Meta y conservar los
   enlaces entregados); validar el recorrido con personal de la clínica.
 
