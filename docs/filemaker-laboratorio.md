@@ -40,7 +40,13 @@ original. El guion guarda el registro y rechaza laboratorios no finalizados.
 
 Abre una ventana auxiliar, busca exactamente `LIn.Lab::rk.lab = $labId`, ordena
 por familia y orden, conserva la configuración de impresión y exporta desde
-`Res.prt  PDF2` (dos espacios). Comprueba que todas las líneas son del mismo
+`Res.prt  PDF2.Firma` (dos espacios). Desde el 04/11/2026 esa presentación lleva
+la firma del médico (`_Medico.FirmaLab::firma`) y su nombre centrados en un
+**Sumario general continuo**: sale una sola vez, al final de los resultados, y si
+no cabe en la última página pasa entera a la siguiente. El pie quedó solo con la
+fecha de envío y la dirección. Respaldo: `Res.prt  PDF2.Firma Copia`. Antes el
+guion exportaba `Res.prt  PDF2`, sin firma; la usa también el botón «Generar
+PDFs del Lab.». Comprueba que todas las líneas son del mismo
 laboratorio. Guarda **todos los registros encontrados y todas las páginas**,
 sin añadir a un PDF previo, en una ruta temporal única. Aquí cada registro es
 un análisis: exportar solo el registro actual dejaría el informe incompleto.
