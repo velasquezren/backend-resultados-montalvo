@@ -128,6 +128,12 @@ existiendo aunque FileMaker publique solo: es donde se ve a qué número va y
 dónde se decide gastar el mensaje. Que el CRM envíe sin que nadie mire sería
 otro cambio —un barrido automático— y no está hecho.
 
+Desde el 04/11/2026 el guion de ecografía puede pedir ese aviso él mismo, en la
+misma pulsación de la asistente: tras publicar aquí llama al CRM con su propia
+credencial, y el CRM envía por el mismo camino que el botón. Este portal no
+cambia y sigue sin mandar mensajes. Contrato y activación en
+`backend-crm-montalvo/docs/filemaker-avisos-ecografia.md`.
+
 ## FileMaker es local: limita la ruta a la clínica
 
 El servidor es un VPS remoto, así que la llamada sale por internet igual. Pero
