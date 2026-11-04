@@ -62,11 +62,16 @@ primer envío real. Se conserva el aviso final de éxito o error.
 
 1. Abrir el laboratorio finalizado y revisar paciente y resultados.
 2. Pulsar el botón que ejecuta **generar PDF al CRM**, sin parámetro.
-3. Comprobar la respuesta y el informe en Resultados del CRM.
-4. Enviar el aviso al paciente desde el CRM cuando corresponda.
+3. Confirmar el número en la pregunta (o cambiarlo) y enviar.
 
-El botón publica el informe; no envía WhatsApp. Etiqueta sugerida: **Enviar al
-CRM**. Reenviar la misma referencia reemplaza el PDF si cambió, manteniendo el
+**Desde el 04/11/2026 el mismo botón también avisa por WhatsApp**, igual que el
+de ecografía: tras publicar, el guion pregunta al CRM a qué ficha y número iría
+el aviso y la asistente elige [Enviar] [Cambiar número] [No enviar]. Llena
+`estado_envio`, `fecha_envio`, `hora_envio`, `usu_envio` y `telf_envio` de
+Labtrio (no toca `estado`, que sigue en FINALIZO). Este portal no manda nada; el
+contrato está en `backend-crm-montalvo/docs/filemaker-avisos-ecografia.md`. El
+guion anterior quedó como «generar PDF al CRM Copia». `$mostrarRespuesta` quedó
+en `0`. Reenviar la misma referencia reemplaza el PDF si cambió, manteniendo el
 informe y el enlace. No cambiar referencia, PAC, fecha o cuenta responsable para
 forzar una actualización; una discrepancia de identidad debe revisarse.
 
