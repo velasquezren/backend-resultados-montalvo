@@ -53,11 +53,13 @@ cabecera del paciente se repite en todas las hojas.
   `FamiliaEx = familia`, tabla `Labtrio_llenado`) y `Llenado.FirmaFam →
   _Medico.FirmaFam` (`personal.py = pkey`, tabla `_Medico` del archivo Medico).
 - Portal de una fila con filtro `Llenado.FirmaFam::lleno = "Si"`: firma
-  (`_Medico.FirmaFam::firma`, 82×36 pt, centrada) y debajo
-  `Labtrio_llenado::firma_nombre`, cálculo sin almacenar
-  `Trim ( Dr & " " & Nombre )` en contexto `Llenado.FirmaFam`. El nombre es un
-  campo dentro del portal: un texto combinado no queda dentro del portal y
-  mostraría a otra persona.
+  (`_Medico.FirmaFam::firma`, centrada). Desde el 05/11 por la tarde mide
+  138×69 pt con «Reducir o ampliar imagen para encajar» y proporciones
+  conservadas. Ya no lleva el nombre debajo: el campo
+  `Labtrio_llenado::firma_nombre` (cálculo sin almacenar
+  `Trim ( Dr & " " & Nombre )` en contexto `Llenado.FirmaFam`) sigue existiendo
+  por si se vuelve a poner. Si se pone, debe ir como campo dentro del portal: un
+  texto combinado no queda dentro del portal y mostraría a otra persona.
 - Familia sin nadie marcado: la hoja sale **sin firma** (ya no se pone la firma
   fija de `_Medico.FirmaLab`). Por eso «generar PDF al CRM» avisa **antes de
   publicar y enviar** (pasos 38–45, tras validar los datos): con `ExecuteSQL`
@@ -66,8 +68,11 @@ cabecera del paciente se repite en todas las hojas.
   [Volver] (sale sin enviar) y [Enviar sin firma]. Si la consulta falla, avisa
   igual. Si marcan dos personas en la misma familia, sale solo una firma.
 - Para que una familia larga entre con su firma en una hoja, la fila de
-  resultados bajó de 18 a 17 pt y el bloque de firma mide 53 pt. Hemograma y
-  Urianálisis completos caben; una familia más larga pasa la firma a la hoja
+  resultados bajó de 18 a 16 pt (cuerpo 185–201, celdas de 16 pt desde 185) y el
+  bloque de firma mide 72 pt. Con LAB88928, Hemograma y Urianálisis completos
+  caben; con 75 pt Urianálisis ya pasaba la firma sola a una octava hoja. El
+  blanco que se ve bajo la última fila no se puede usar entero, así que hay que
+  medir en vista previa. Una familia más larga pasa la firma a la hoja
   siguiente sin cortarla.
 - Respaldo de la versión anterior (firma fija al final):
   `Res.prt  PDF2.Firma antes 05-11`. La de antes del 04/11 sigue en
