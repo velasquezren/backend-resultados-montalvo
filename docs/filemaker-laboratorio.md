@@ -40,13 +40,45 @@ original. El guion guarda el registro y rechaza laboratorios no finalizados.
 
 Abre una ventana auxiliar, busca exactamente `LIn.Lab::rk.lab = $labId`, ordena
 por familia y orden, conserva la configuración de impresión y exporta desde
-`Res.prt  PDF2.Firma` (dos espacios). Desde el 04/11/2026 esa presentación lleva
-la firma del médico (`_Medico.FirmaLab::firma`) y su nombre centrados en un
-**Sumario general continuo**: sale una sola vez, al final de los resultados, y si
-no cabe en la última página pasa entera a la siguiente. El pie quedó solo con la
-fecha de envío y la dirección. Respaldo: `Res.prt  PDF2.Firma Copia`. Antes el
-guion exportaba `Res.prt  PDF2`, sin firma; la usa también el botón «Generar
-PDFs del Lab.». Comprueba que todas las líneas son del mismo
+`Res.prt  PDF2.Firma` (dos espacios). La usa también «genera un solo PDF»
+(botón «Generar PDFs del Lab.»).
+
+**Desde el 05/11/2026, una hoja y una firma por familia.** La parte de la firma es
+un subsumario posterior por `FamiliaEx` con salto de página después: cada familia
+(Hematología, Urianálisis…) empieza en hoja nueva y termina con la firma de
+**quien marcó su nombre en «Responsables del llenado»** de esa familia. La
+cabecera del paciente se repite en todas las hojas.
+
+- Relación nueva `LIn.Lab → Llenado.FirmaFam` (`rk.lab = lab.pk` y
+  `FamiliaEx = familia`, tabla `Labtrio_llenado`) y `Llenado.FirmaFam →
+  _Medico.FirmaFam` (`personal.py = pkey`, tabla `_Medico` del archivo Medico).
+- Portal de una fila con filtro `Llenado.FirmaFam::lleno = "Si"`: firma
+  (`_Medico.FirmaFam::firma`, 82×36 pt, centrada) y debajo
+  `Labtrio_llenado::firma_nombre`, cálculo sin almacenar
+  `Trim ( Dr & " " & Nombre )` en contexto `Llenado.FirmaFam`. El nombre es un
+  campo dentro del portal: un texto combinado no queda dentro del portal y
+  mostraría a otra persona.
+- Familia sin nadie marcado: la hoja sale **sin firma** (ya no se pone la firma
+  fija de `_Medico.FirmaLab`). Por eso «generar PDF al CRM» avisa **antes de
+  publicar y enviar** (pasos 38–45, tras validar los datos): con `ExecuteSQL`
+  busca las `FamiliaEx` del laboratorio que no tienen ningún `lleno = "Si"` en
+  `Labtrio_llenado` y, si hay alguna, muestra «Familias sin responsable» con
+  [Volver] (sale sin enviar) y [Enviar sin firma]. Si la consulta falla, avisa
+  igual. Si marcan dos personas en la misma familia, sale solo una firma.
+- Para que una familia larga entre con su firma en una hoja, la fila de
+  resultados bajó de 18 a 17 pt y el bloque de firma mide 53 pt. Hemograma y
+  Urianálisis completos caben; una familia más larga pasa la firma a la hoja
+  siguiente sin cortarla.
+- Respaldo de la versión anterior (firma fija al final):
+  `Res.prt  PDF2.Firma antes 05-11`. La de antes del 04/11 sigue en
+  `Res.prt  PDF2.Firma Copia`.
+
+Comprobado en vista previa, sin publicar ni enviar, con LAB88928: 7 familias,
+7 hojas, cada una con la firma de quien la marcó (Rocabado en Bioquímica e
+Inmunoserología, Escalera en Coagulograma, Hematología y Urianálisis) y sin firma
+en Bacteriología y Serología, que nadie marcó.
+
+Comprueba que todas las líneas son del mismo
 laboratorio. Guarda **todos los registros encontrados y todas las páginas**,
 sin añadir a un PDF previo, en una ruta temporal única. Aquí cada registro es
 un análisis: exportar solo el registro actual dejaría el informe incompleto.
