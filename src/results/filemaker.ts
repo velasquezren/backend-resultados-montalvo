@@ -10,7 +10,7 @@ import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { normalizeId } from './patients';
 import { fechaDeEstudio, vencimiento } from './results';
-import { ESTUDIO_PREDETERMINADO } from './tipos';
+import { enlacePaciente, ESTUDIO_PREDETERMINADO } from './tipos';
 
 /**
  * La credencial, comprobada en un GUARD y no dentro del handler.
@@ -172,7 +172,7 @@ export class FileMakerIntake {
       estudio: informe.estudio,
       fechaEstudio: informe.fechaEstudio,
       archivo: informe.archivo,
-      acceso: informe.acceso && { id: informe.acceso.id, expiraEn: informe.acceso.expiraEn, url: `${this.config.portalUrl}/${informe.acceso.id}` },
+      acceso: informe.acceso && { id: informe.acceso.id, expiraEn: informe.acceso.expiraEn, url: enlacePaciente(this.config.portalUrl, informe.tipo, informe.acceso.id) },
     };
   }
 }

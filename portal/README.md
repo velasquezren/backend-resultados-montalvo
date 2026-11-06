@@ -42,6 +42,24 @@ portal que genera el sistema. No registrar URLs completas de resultados.
 
 Las pruebas de navegador de esta entrega usan solo pacientes/PDF sintéticos. Falta validar proveedores reales, HTTPS/dominio productivo y el flujo operativo con personal de la clínica antes de cargar documentos reales.
 
+## Laboratorio Climon: su propia página (06/11/2026, sin desplegar)
+
+Laboratorio Climon y Clínica Montalvo son dos empresas. El paciente de un
+análisis de laboratorio abre `/laboratorio/:accesoId`, con el nombre, el logo
+oficial (`public/climon/`, recortado y reducido del PNG de la landing de Climon),
+el ícono y la tarjeta de WhatsApp de Climon (`app/laboratorio/`). Ecografía,
+Papanicolau y otros siguen en `/resultados/:accesoId`, sin cambios.
+
+- Quién entrega cada tipo: `lib/marcas.ts` (`marcaDeTipo`). Un laboratorio abierto
+  por `/resultados/` —los avisos ya enviados y la plantilla actual del CRM— pasa a
+  `/laboratorio/` en cuanto se sabe su tipo; mientras, se ve el esqueleto de
+  carga, nunca el informe con la otra marca. Al revés, igual.
+- El PDF (`/laboratorio/:id/pdf`) y su página de error son los mismos, con la
+  marca y el regreso de su página. `robots.txt` deja a WhatsApp leer las dos
+  tarjetas, nunca sus PDF.
+- Ayuda y «Agendar» van a la misma línea de Recepción: Climon aún no tiene
+  WhatsApp propio. Cambiarlo es una línea en `lib/marcas.ts`.
+
 ## Informes multítipo (desplegado el 25/10/2026)
 
 El médico selecciona Ecografía, Papanicolau, Laboratorio u Otro estudio al crear

@@ -1,7 +1,9 @@
 "use client";
 import { reportTypeLabel } from '@/lib/types';
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/client";
+import { Marca, MARCAS, marcaDeTipo, paginaDelPaciente } from "@/lib/marcas";
 import { AdjuntoPaciente, dateLabel } from "@/lib/types";
 import PatientMedia from "./PatientMedia";
 type Result = {
@@ -23,12 +25,9 @@ type Estado =
   | { tipo: "enlace-inactivo"; mensaje: string }
   | { tipo: "error"; mensaje: string };
 
-/** La línea de Recepción: la misma desde la que llega el aviso, así la
-    respuesta del paciente cae en ese mismo chat del CRM. */
-const WHATSAPP_CLINICA = "59175031306";
-const whatsapp = (texto: string) =>
-  `https://wa.me/${WHATSAPP_CLINICA}?text=${encodeURIComponent(texto)}`;
-const AYUDA = whatsapp("Hola, necesito ayuda para ver mi resultado.");
+/** El chat de la marca (hoy Recepción en las dos, ver `lib/marcas.ts`). */
+const whatsapp = (numero: string, texto: string) =>
+  `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 
 /* Íconos de trazo, del tamaño del texto; sin librería para cinco dibujos. */
 const Icono = ({ d, tam = 18 }: { d: string; tam?: number }) => (
@@ -54,9 +53,13 @@ const FLECHA = "M9 6l6 6-6 6";
  * dónde fue. Un botón grande que lo abre en el visor del teléfono es un toque
  * más y ninguna duda.
  */
-export default function PatientPortal({ accessId }: { accessId: string }) {
+export default function PatientPortal({ accessId, marca = "montalvo" }: { accessId: string; marca?: Marca }) {
   const [estado, setEstado] = useState<Estado>({ tipo: "abriendo" });
   const sesionDesde = useRef(0);
+  const router = useRouter();
+  const pagina = paginaDelPaciente(marca, accessId);
+  const escribir = (texto: string) => whatsapp(MARCAS[marca].whatsapp, texto);
+  const AYUDA = escribir("Hola, necesito ayuda para ver mi resultado.");
 
   /** El enlace es la llave: renovar la sesión es volver a «abrirlo», sin pedir nada. */
   const asegurarSesion = useCallback(async (forzar = false) => {
@@ -69,7 +72,17 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
     setEstado({ tipo: "abriendo" });
     try {
       await asegurarSesion(true);
-      setEstado({ tipo: "listo", result: await api<Result>("v1/portal/informe") });
+      const result = await api<Result>("v1/portal/informe");
+      /* Un laboratorio abierto por `/resultados/` (los avisos enviados antes de
+         separar las marcas, o la plantilla de la clínica) se ve en su página,
+         con la marca de quien lo emitió. Mientras, sigue el esqueleto: no se
+         llega a ver el informe con la marca equivocada. */
+      const suya = marcaDeTipo(result.tipo);
+      if (suya !== marca) {
+        router.replace(paginaDelPaciente(suya, accessId));
+        return;
+      }
+      setEstado({ tipo: "listo", result });
     } catch (err) {
       /* 401 es un enlace vencido o retirado: se dice qué hacer, no «error». */
       if (err instanceof ApiError && err.status === 401)
@@ -81,7 +94,7 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
             err instanceof Error ? err.message : "No pudimos abrir tu resultado.",
         });
     }
-  }, [asegurarSesion]);
+  }, [asegurarSesion, marca, accessId, router]);
 
   useEffect(() => {
     void abrir();
@@ -113,14 +126,14 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
             </p>
             {estado.result.disponible ? (
               <>
-                <a className="pac-boton" href={`/resultados/${accessId}/pdf`} target="_blank" rel="noreferrer">
+                <a className="pac-boton" href={`${pagina}/pdf`} target="_blank" rel="noreferrer">
                   <Icono d={DOCUMENTO} /> Ver informe
                 </a>
                 <p className="pac-nota">Se abre en el visor de tu teléfono, desde donde puedes guardarlo.</p>
                 {/* «Ver informe» abre la versión liviana, que carga rápido con
                     datos móviles. Este es el archivo tal cual lo publicó el
                     médico, para imprimirlo o guardarlo en máxima calidad. */}
-                <a className="pac-enlace" href={`/resultados/${accessId}/pdf?original=1`}>
+                <a className="pac-enlace" href={`${pagina}/pdf?original=1`}>
                   Descargar el original en alta calidad
                 </a>
               </>
@@ -135,7 +148,7 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
 
           <nav className="pac-lista" aria-label="Qué más puedes hacer">
             <a className="pac-fila" rel="noreferrer" target="_blank"
-              href={whatsapp(`Hola, recibí mi resultado de ${estado.result.estudio} y quiero agendar una consulta para revisarlo.`)}>
+              href={escribir(`Hola, recibí mi resultado de ${estado.result.estudio} y quiero agendar una consulta para revisarlo.`)}>
               <span className="pac-fila-icono"><Icono d={CALENDARIO} /></span>
               <span className="pac-fila-texto">
                 <strong>Agendar una consulta</strong>
@@ -162,7 +175,7 @@ export default function PatientPortal({ accessId }: { accessId: string }) {
           <h1 className="pac-titulo">Este enlace ya no está activo</h1>
           <p className="pac-texto">{estado.mensaje}</p>
           <a className="pac-boton" rel="noreferrer" target="_blank"
-            href={whatsapp("Hola, mi enlace de resultados venció. ¿Me pueden enviar uno nuevo?")}>
+            href={escribir("Hola, mi enlace de resultados venció. ¿Me pueden enviar uno nuevo?")}>
             <Icono d={MENSAJE} /> Pedir un enlace nuevo
           </a>
         </article>

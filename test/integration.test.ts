@@ -851,6 +851,8 @@ test('tipos clínicos: referencias independientes y reemplazo limitado al mismo 
     const primero = await desdeFileMaker(campos);
     assert.equal(primero.status, 201);
     assert.equal(primero.data.tipo, tipo);
+    // Laboratorio lo emite Laboratorio Climon: su enlace abre su propia página.
+    assert.match(primero.data.acceso!.url, tipo === 'LABORATORIO' ? /\/laboratorio\/[0-9a-f-]{36}$/ : /\/resultados\/[0-9a-f-]{36}$/);
     informes.push(primero.data.informeId);
     const repetido = await desdeFileMaker(campos);
     assert.equal(repetido.data.informeId, primero.data.informeId);

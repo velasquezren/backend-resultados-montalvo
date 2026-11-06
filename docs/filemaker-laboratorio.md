@@ -118,6 +118,14 @@ en `0`. Reenviar la misma referencia reemplaza el PDF si cambió, manteniendo el
 informe y el enlace. No cambiar referencia, PAC, fecha o cuenta responsable para
 forzar una actualización; una discrepancia de identidad debe revisarse.
 
+## La página del paciente es de Laboratorio Climon (06/11/2026)
+
+El paciente abre su laboratorio en `/laboratorio/<acceso>`, con la marca de
+Laboratorio Climon y no la de Clínica Montalvo; `acceso.url` de la respuesta ya
+trae esa dirección. Los enlaces enviados antes por `/resultados/` siguen
+funcionando. El texto del WhatsApp sigue siendo el de la plantilla de la clínica
+hasta crear la de Climon ([operación](operacion.md#plantilla-de-aviso-la-envía-el-crm)).
+
 ## Comprobación realizada el 26/10/2026
 
 - Los 141 pasos se pegaron en FileMaker, se leyeron de nuevo y se compararon;

@@ -223,7 +223,7 @@ export default function ReportDetail({
         </form>
       )}
       {report.estado !== "RETIRADO" && (access || report.acceso) && (
-        <AccessCard access={access || report.acceso!} />
+        <AccessCard access={access || report.acceso!} tipo={report.tipo} />
       )}
       {report.estado !== "RETIRADO" && (
         <section className="section actions">

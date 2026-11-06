@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 /**
  * Nadie indexa el portal, pero los lectores de VISTA PREVIA sí pueden leer la
- * página de un resultado: sin ellos, un enlace reenviado o pegado en WhatsApp
+ * página de un resultado (`/resultados/` y `/laboratorio/`): sin ellos, un enlace reenviado o pegado en WhatsApp
  * aparece desnudo, sin la tarjeta de la clínica.
  *
  * Es seguro porque esa página no lleva ningún dato del paciente en el HTML
@@ -13,7 +13,11 @@ import type { MetadataRoute } from "next";
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: ["facebookexternalhit", "Facebot", "WhatsApp"], allow: "/resultados/", disallow: ["/", "/resultados/*/pdf"] },
+      {
+        userAgent: ["facebookexternalhit", "Facebot", "WhatsApp"],
+        allow: ["/resultados/", "/laboratorio/"],
+        disallow: ["/", "/resultados/*/pdf", "/laboratorio/*/pdf"],
+      },
       { userAgent: "*", disallow: "/" },
     ],
   };

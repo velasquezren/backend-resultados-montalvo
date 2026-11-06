@@ -49,6 +49,18 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 
 ## Bitácora (más reciente arriba)
 
+> **06/11/2026 — Laboratorio Climon con su propia página, rama `laboratorio-climon`,
+> SIN desplegar.** Los informes `LABORATORIO` se abren en `/laboratorio/<acceso>`
+> con la marca de Laboratorio Climon (otra empresa); el resto sigue en
+> `/resultados/`. API: `enlacePaciente` da el `acceso.url` según el tipo. Portal:
+> `lib/marcas.ts`, `app/laboratorio/` (marco, página, PDF, ícono y tarjeta de
+> WhatsApp con el logo oficial) y paso automático de una página a otra según el
+> tipo. Sin migración ni cambios de base, sesiones o PDFs; los enlaces ya enviados
+> siguen sirviendo. 23 unitarias y 58 de integración de la API, 24 del portal,
+> typecheck y `next build --webpack` aprobados. Pendiente: plantilla de Climon en
+> Meta (propuesta en [operación](docs/operacion.md)) y que el CRM la use para
+> `LABORATORIO`.
+
 > **25/10/2026, 20:39 La Paz — informes multítipo DESPLEGADOS (`4cb6ada`).**
 > Release `/opt/montalvo-resultados/releases/20261025-multitipo-4cb6ada` con API,
 > worker y portal propios (portal compilado con `--webpack` como `resultados-web`;

@@ -7,6 +7,7 @@ import { CrearInformeDto, InformesCrmDto, ListarDto, PanoramaCrmDto, PublicarDto
 import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { DURACION_REVISION_MS, firmarRevision, leerRevision } from './revision';
+import { enlacePaciente } from './tipos';
 
 export function scope(actor: Actor): Prisma.InformeWhereInput { return actor.rol === 'ADMIN' ? {} : { medicoId: actor.id }; }
 const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true } }, paciente: { select: { id: true, nombre: true, ci: true, pac: true } }, medico: { select: { id: true, nombre: true } }, archivo: { select: { id: true, bytes: true, paginas: true, sha256: true } },
@@ -66,7 +67,7 @@ export class Results {
   }
   /** Existencia y alcance, sin traer el detalle: distingue 404 de 409 sin coste. */
   private async ensure(id: string, actor: Actor) {
-    const found = await this.db.informe.findFirst({ where: { id, ...scope(actor) }, select: { id: true, estado: true, revision: true, archivoId: true } });
+    const found = await this.db.informe.findFirst({ where: { id, ...scope(actor) }, select: { id: true, tipo: true, estado: true, revision: true, archivoId: true } });
     if (!found) problem(404, 'INFORME_NO_ENCONTRADO', 'No encontramos el informe o no tienes acceso a él.');
     return found;
   }
@@ -209,7 +210,7 @@ export class Results {
       const report = await tx.informe.create({ data: { ...dto, estudio: dto.estudio.trim(), fechaEstudio: fecha, medicoId: actor.id } });
       const access = await tx.accesoPaciente.create({ data: { informeId: report.id, expiraEn: vencimiento() } });
       await this.audit(tx, actor.id, 'INFORME_CREADO', report.id);
-      return { informe: report, acceso: { id: access.id, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` } };
+      return { informe: report, acceso: { id: access.id, expiraEn: access.expiraEn, url: enlacePaciente(this.config.portalUrl, report.tipo, access.id) } };
     });
     return result;
   }
@@ -274,7 +275,7 @@ export class Results {
       await this.audit(tx, actor.id, 'ACCESO_RENOVADO', id);
       return renewed;
     });
-    return { id: access.id, expiraEn: access.expiraEn, url: `${this.config.portalUrl}/${access.id}` };
+    return { id: access.id, expiraEn: access.expiraEn, url: enlacePaciente(this.config.portalUrl, report.tipo, access.id) };
   }
   /**
    * La misma renovación, pedida por el CRM cuando recepción reenvía un aviso

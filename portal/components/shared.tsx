@@ -1,5 +1,6 @@
 "use client";
 import { Access, dateLabel } from "@/lib/types";
+import { marcaDeTipo, paginaDelPaciente } from "@/lib/marcas";
 export function message(error: unknown) {
   return error instanceof Error
     ? error.message
@@ -33,8 +34,9 @@ export function Feedback({
  * El enlace del paciente. Es la llave de su informe: quien lo abre lo ve, sin
  * código. No se entrega en papel: recepción lo envía por WhatsApp desde el CRM.
  */
-export function AccessCard({ access }: { access: Access }) {
-  const url = access.url || `${window.location.origin}/resultados/${access.id}`;
+export function AccessCard({ access, tipo }: { access: Access; tipo?: string }) {
+  /* La API ya da el enlace en la página de su marca; esto es por si no lo trae. */
+  const url = access.url || `${window.location.origin}${paginaDelPaciente(marcaDeTipo(tipo), access.id)}`;
   return (
     <section className="access-card">
       <h3>Enlace del paciente</h3>

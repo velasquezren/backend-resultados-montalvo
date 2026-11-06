@@ -319,3 +319,10 @@ test('antivirus de adjuntos: limpio pasa, infectado es 400 y pasarse del límite
     if (anterior.puerto === undefined) delete process.env.CLAMAV_PORT; else process.env.CLAMAV_PORT = anterior.puerto;
   }
 });
+test('el enlace del paciente: laboratorio es de Laboratorio Climon y abre en /laboratorio/', async () => {
+  const { enlacePaciente } = await import('../src/results/tipos');
+  const portal = 'https://resultados.example/resultados';
+  const id = '5b0e3a9e-7a51-4c55-9a0e-6f1d2f6a0b11';
+  assert.equal(enlacePaciente(portal, 'LABORATORIO', id), `https://resultados.example/laboratorio/${id}`);
+  for (const tipo of ['ECOGRAFIA', 'PAPANICOLAU', 'OTRO'] as const) assert.equal(enlacePaciente(portal, tipo, id), `${portal}/${id}`);
+});

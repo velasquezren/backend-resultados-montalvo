@@ -33,6 +33,29 @@ La memoria de ClamAV y el análisis PDF requieren dimensionamiento. Recomendaci�
 
 **El cuerpo no lleva variables**: el CRM (`ResultadosService`) manda un único componente, el botón URL con el ID de acceso. No agregar diagnóstico, tipo de estudio, CI, PAC ni el PDF al mensaje: puede leerse en un teléfono compartido. Cerrar con «responde a este mensaje» abre la ventana de 24 horas para resolver dudas por el mismo hilo, y es el patrón con el que se aprobaron las plantillas de citas de esta clínica.
 
+**Laboratorio Climon (pendiente, sin crear en Meta).** Desde el 06/11 el portal abre
+los laboratorios en `/laboratorio/<acceso>` con la marca de Climon, que es otra
+empresa. La plantilla de arriba dice «Clínica Montalvo» y su botón va a
+`/resultados/{{1}}`: con ella el laboratorio se abre igual (el portal lo lleva a
+su página), pero el texto y la tarjeta del mensaje son de la clínica. Separarlo
+del todo pide una plantilla propia —crearla necesita el OK de René— y que el CRM
+la use solo para `LABORATORIO`:
+
+| Campo | Propuesta |
+| --- | --- |
+| Nombre / categoría / idioma | `climon_resultado_laboratorio` / Utilidad / `es` |
+| Botón | Visitar sitio web · URL dinámica · `Ver mi resultado` → `https://resultados.107.175.132.15.nip.io/laboratorio/{{1}}` |
+| Respuesta rápida | `Recibir PDF`, como `montalvo_informe_pdf` |
+
+> Laboratorio Climon: su resultado de laboratorio ya está disponible.
+>
+> Toque el botón de abajo para verlo y descargarlo.
+>
+> Si necesita ayuda, responda a este mensaje.
+
+Sale de la misma línea de Recepción (Climon no tiene línea propia); si Climon
+tiene su número, la plantilla iría en esa WABA.
+
 **Riesgo conocido**: el botón apunta a un dominio sobre IP (`nip.io`). Al adoptar un subdominio propio habrá que editar la plantilla, lo que la devuelve a revisión.
 
 La [política de WhatsApp](https://business.whatsapp.com/policy) exige los permisos aplicables para contactar y plantillas aprobadas para iniciar conversaciones conforme a sus reglas; no hace falta obligar al paciente a escribir primero cuando se cumple ese flujo. La [tarificación oficial](https://business.whatsapp.com/products/platform-pricing) depende de categoría y mercado: no se fija un precio inventado en bolivianos.

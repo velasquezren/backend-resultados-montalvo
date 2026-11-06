@@ -132,6 +132,15 @@ clasificación explícita; no se deduce del nombre del estudio. Omitirlo conserv
 `ECOGRAFIA` para los guiones actuales. `null` y tipos desconocidos se rechazan.
 La configuración médica expone `tipos`; el acceso del paciente es `ENLACE_DIRECTO`.
 
+**Dos empresas, dos páginas (06/11/2026, sin desplegar).** Los informes
+`LABORATORIO` los emite **Laboratorio Climon** (Laboratorio Clínico Climon S.R.L.),
+otra empresa que Clínica Montalvo: su `acceso.url` es `<origen>/laboratorio/<acceso>`
+y el resto sigue en `PATIENT_PORTAL_URL` (`<origen>/resultados/<acceso>`). Lo
+calcula `enlacePaciente` (`src/results/tipos.ts`) en la creación, la renovación y
+la respuesta a FileMaker. El acceso es el mismo: un `/resultados/<acceso>` de
+laboratorio (avisos ya enviados, plantilla de la clínica) sigue abriendo y el
+portal lo lleva a `/laboratorio/`. Marca de cada página en `portal/lib/marcas.ts`.
+
 - Crear desde el portal: POST `/v1/informes` admite `tipo` junto a los campos existentes.
 - Listar: GET `/v1/informes`, `/v1/integraciones/crm/informes` y
   `/v1/integraciones/crm/informes/panorama` aceptan `?tipo=…`.
