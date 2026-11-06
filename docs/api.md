@@ -132,7 +132,7 @@ clasificación explícita; no se deduce del nombre del estudio. Omitirlo conserv
 `ECOGRAFIA` para los guiones actuales. `null` y tipos desconocidos se rechazan.
 La configuración médica expone `tipos`; el acceso del paciente es `ENLACE_DIRECTO`.
 
-**Dos empresas, dos páginas (06/11/2026, sin desplegar).** Los informes
+**Dos empresas, dos páginas (desplegado el 06/11/2026).** Los informes
 `LABORATORIO` los emite **Laboratorio Climon** (Laboratorio Clínico Climon S.R.L.),
 otra empresa que Clínica Montalvo: su `acceso.url` es `<origen>/laboratorio/<acceso>`
 y el resto sigue en `PATIENT_PORTAL_URL` (`<origen>/resultados/<acceso>`). Lo

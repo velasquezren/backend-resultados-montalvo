@@ -42,7 +42,7 @@ portal que genera el sistema. No registrar URLs completas de resultados.
 
 Las pruebas de navegador de esta entrega usan solo pacientes/PDF sintéticos. Falta validar proveedores reales, HTTPS/dominio productivo y el flujo operativo con personal de la clínica antes de cargar documentos reales.
 
-## Laboratorio Climon: su propia página (06/11/2026, sin desplegar)
+## Laboratorio Climon: su propia página (desplegado el 06/11/2026)
 
 Laboratorio Climon y Clínica Montalvo son dos empresas. El paciente de un
 análisis de laboratorio abre `/laboratorio/:accesoId`, con el nombre, el logo

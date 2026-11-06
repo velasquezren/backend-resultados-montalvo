@@ -13,8 +13,8 @@ comprobar su estado: esto es una foto, no una garantía.
 - **Qué es:** portal independiente para médicos y pacientes. API NestJS 12 y
   portal Next 16 en este repositorio; base propia `resultados_prod`. No comparte
   base, usuarios ni sesiones con el CRM. Los médicos no usan el CRM.
-- **En producción:** release `/opt/montalvo-resultados/releases/20261025-multitipo-4cb6ada`
-  (`current`), servicios `resultados-api` (:3010), `resultados-worker` (limpieza
+- **En producción:** release `/opt/montalvo-resultados/releases/20261106-laboratorio-climon-49b5ad5`
+  (`current`, desde el 06/11; antes `20261025-multitipo-4cb6ada`), servicios `resultados-api` (:3010), `resultados-worker` (limpieza
   horaria) y `resultados-portal` (:3011), Node 22.23.1, ClamAV y
   `STORAGE_DRIVER=local-encrypted` (PDF cifrados `MNTV1`/`MNTV2`). Portal en
   `https://resultados.107.175.132.15.nip.io/`; certificado hasta el 20/12/2026
@@ -49,8 +49,22 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 
 ## Bitácora (más reciente arriba)
 
-> **06/11/2026 — Laboratorio Climon con su propia página, rama `laboratorio-climon`,
-> SIN desplegar.** Los informes `LABORATORIO` se abren en `/laboratorio/<acceso>`
+> **06/11/2026, 12:40 La Paz — Laboratorio Climon DESPLEGADO (`49b5ad5`).** Release
+> `/opt/montalvo-resultados/releases/20261106-laboratorio-climon-49b5ad5` (`current`),
+> drop-in `20-pdf-cache.conf` del portal apuntando a su `.next/cache`. Respaldo previo
+> `/root/backups-resultados/20261106T173117Z` (verificado a mano) y reversión en
+> `/root/backup-resultados-20261106-123117-climon/revertir.sh` (vuelve a `20261025`).
+> Comprobado por HTTPS: `/laboratorio/<acceso>` con título, cabecera y tarjeta de
+> Climon; `/resultados/` sigue siendo de la clínica; `robots.txt` con las dos rutas.
+>
+> **Aviso: la copia local diaria falla desde al menos el 03/11** con «error writing
+> output file». Las copias se escriben completas; falla la comprobación final:
+> `openssl … | pg_restore --list` cierra la tubería tras leer el índice y, con
+> `pipefail`, el script sale antes de la retención de 7 días. Por eso se acumulan
+> (19 copias, ~27 GB, disco al 81 %). Pendiente de OK: arreglar esa comprobación y
+> dejar que la retención limpie.
+>
+> **06/11/2026 — Laboratorio Climon con su propia página** (antes de desplegarlo): Los informes `LABORATORIO` se abren en `/laboratorio/<acceso>`
 > con la marca de Laboratorio Climon (otra empresa); el resto sigue en
 > `/resultados/`. API: `enlacePaciente` da el `acceso.url` según el tipo. Portal:
 > `lib/marcas.ts`, `app/laboratorio/` (marco, página, PDF, ícono y tarjeta de
