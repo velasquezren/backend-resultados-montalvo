@@ -49,6 +49,13 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 
 ## Bitácora (más reciente arriba)
 
+> **06/11/2026, tarde — Pendiente, SIN desplegar: «Pedir ayuda» de Climon a su
+> número (`aa87f54`).** `portal/lib/marcas.ts` → `59162140323` (línea Laboratorio
+> CLIMON). Se despliega **junto con** el encendido del aviso de laboratorio desde esa
+> línea (CRM `ff41118`, pasos en `docs/plantillas-whatsapp.md` §7 del backend del
+> CRM), cuando Meta apruebe `climon_resultado_laboratorio`. Antes no: hoy el aviso de
+> laboratorio aún llega desde Recepción.
+
 > **06/11/2026, 14:15 La Paz — PDF de informe hasta 40 MB DESPLEGADO (`64c3ff7`).**
 > Release `/opt/montalvo-resultados/releases/20261106-pdf-40mb-64c3ff7`, migración
 > `20261106200000_pdf_hasta_40mb` (CHECK `Archivo_limites` a 41943040), drop-in del
