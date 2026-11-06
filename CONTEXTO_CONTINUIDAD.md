@@ -13,8 +13,8 @@ comprobar su estado: esto es una foto, no una garantía.
 - **Qué es:** portal independiente para médicos y pacientes. API NestJS 12 y
   portal Next 16 en este repositorio; base propia `resultados_prod`. No comparte
   base, usuarios ni sesiones con el CRM. Los médicos no usan el CRM.
-- **En producción:** release `/opt/montalvo-resultados/releases/20261106-laboratorio-climon-49b5ad5`
-  (`current`, desde el 06/11; antes `20261025-multitipo-4cb6ada`), servicios `resultados-api` (:3010), `resultados-worker` (limpieza
+- **En producción:** release `/opt/montalvo-resultados/releases/20261106-pdf-40mb-64c3ff7`
+  (`current`, desde el 06/11; antes `20261106-laboratorio-climon-49b5ad5`), servicios `resultados-api` (:3010), `resultados-worker` (limpieza
   horaria) y `resultados-portal` (:3011), Node 22.23.1, ClamAV y
   `STORAGE_DRIVER=local-encrypted` (PDF cifrados `MNTV1`/`MNTV2`). Portal en
   `https://resultados.107.175.132.15.nip.io/`; certificado hasta el 20/12/2026
@@ -48,6 +48,16 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 `resultados-web`.
 
 ## Bitácora (más reciente arriba)
+
+> **06/11/2026, 14:15 La Paz — PDF de informe hasta 40 MB DESPLEGADO (`64c3ff7`).**
+> Release `/opt/montalvo-resultados/releases/20261106-pdf-40mb-64c3ff7`, migración
+> `20261106200000_pdf_hasta_40mb` (CHECK `Archivo_limites` a 41943040), drop-in del
+> portal a su `.next/cache` y `<LocationMatch>` de 42 MB en `resultados-ssl.conf`.
+> Respaldo `/root/backups-resultados/20261106T191208Z` y reversión en
+> `/root/backup-resultados-*-pdf40/revertir.sh`. Al verificar: un cuerpo de 20 MB
+> y uno de 50 MB llegan a la API (401 sin credencial), o sea que Apache no cortaba
+> estas rutas; el 413 que veía FileMaker era de la API. El tope efectivo es el de
+> la API (40 MB). Las ecografías de más de 10 MB ya se publican desde FileMaker.
 
 > **06/11/2026, 12:40 La Paz — Laboratorio Climon DESPLEGADO (`49b5ad5`).** Release
 > `/opt/montalvo-resultados/releases/20261106-laboratorio-climon-49b5ad5` (`current`),
