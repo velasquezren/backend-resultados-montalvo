@@ -10,7 +10,10 @@ runuser -u postgres -- pg_dump -Fc resultados_prod | openssl enc -aes-256-cbc -p
 tar -C /var/lib/montalvo-resultados -cf - files | openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:/etc/montalvo-resultados/backup.key -out "$DEST/archivos.tar.enc"
 sha256sum "$DEST/base.dump.enc" "$DEST/archivos.tar.enc" > "$DEST/SHA256SUMS"
 # Validar ambos contenedores sin imprimir contenido clínico.
-openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/etc/montalvo-resultados/backup.key -in "$DEST/base.dump.enc" | pg_restore --list > /dev/null
+# `pg_restore --list` solo lee el índice y cierra: sin el `cat` que vacía el
+# resto, openssl falla con «error writing output file» y, con pipefail, la copia
+# se daba por fallida y la retención no corría (03-06/11/2026).
+openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/etc/montalvo-resultados/backup.key -in "$DEST/base.dump.enc" | { pg_restore --list > /dev/null && cat > /dev/null; }
 openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/etc/montalvo-resultados/backup.key -in "$DEST/archivos.tar.enc" | tar -tf - > /dev/null
 printf 'Copia verificada: %s\n' "$DEST"
 # Siete días (autorizado el 2026-10-26). Cada copia lleva TODOS los archivos
