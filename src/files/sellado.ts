@@ -5,7 +5,7 @@ import type { FileHandle } from 'node:fs/promises';
 /**
  * Cifrado por trozos para los adjuntos (formato `MNTV2`).
  *
- * El PDF se cifra entero (`encryption.ts`): mide 10 MB como mucho y se lee de
+ * El PDF se cifra entero (`encryption.ts`): mide 40 MB como mucho y se lee de
  * una vez. Un video no: pesa hasta 100 MB y el navegador lo pide por tramos
  * (`Range`). Con un solo bloque GCM habría que descifrar el archivo entero en
  * memoria para cada tramo que pide el reproductor —decenas por video—.

@@ -36,7 +36,7 @@ Content-Type: multipart/form-data
 
 | Campo | Obligatorio | Nota |
 | --- | --- | --- |
-| `archivo` | sí | El PDF. Hasta 10 MB y 300 páginas; se valida y pasa por ClamAV |
+| `archivo` | sí | El PDF. Hasta 40 MB (desde el 06/11/2026; antes 10) y 300 páginas; se valida y pasa por ClamAV |
 | `medico` | si no hay defecto | Correo de un médico **activo**. Si el servidor define `FILEMAKER_MEDICO_POR_DEFECTO`, puede omitirse |
 | `nombre` | sí | Nombre del paciente, por si hay que registrarlo |
 | `pac` / `ci` | al menos uno | Identificadores; se normalizan a mayúsculas |
@@ -79,7 +79,7 @@ realiza un envío.
 
 Errores: el mensaje siempre está en `error.mensaje`. `401` credencial, `404`
 médico inexistente o inactivo, `400` PDF inválido, identificador ausente o
-fecha futura, `413` PDF de más de 10 MB.
+fecha futura, `413` PDF de más de 40 MB.
 
 Un PDF rechazado **no deja rastro**: se valida antes de crear nada, así que no
 quedan borradores ni pacientes a medias.

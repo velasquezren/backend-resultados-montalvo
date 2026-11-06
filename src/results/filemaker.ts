@@ -19,7 +19,7 @@ import { enlacePaciente, ESTUDIO_PREDETERMINADO } from './tipos';
  * comprobación dentro del handler, una llamada sin credencial recibía primero
  * la validación del cuerpo —un 400 que enumera los campos del endpoint a quien
  * no se ha identificado— y, peor, el servidor ya había aceptado y procesado su
- * multipart de hasta 10 MB. Aquí se rechaza antes de leer nada.
+ * multipart de hasta 40 MB. Aquí se rechaza antes de leer nada.
  */
 @Injectable()
 export class FileMakerGuard implements CanActivate {

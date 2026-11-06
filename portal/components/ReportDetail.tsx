@@ -47,8 +47,8 @@ export default function ReportDetail({
   async function submitFile(event: FormEvent) {
     event.preventDefault();
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Adjunta un PDF de hasta 10 MB.");
+    if (file.size > 40 * 1024 * 1024) {
+      setError("Adjunta un PDF de hasta 40 MB.");
       return;
     }
     await action(async () => {
@@ -113,7 +113,7 @@ export default function ReportDetail({
         <form className="section" onSubmit={submitFile}>
           <h2>{report.archivoId ? "PDF adjunto" : "Adjunta el resultado"}</h2>
           <p>
-            PDF de hasta 10 MB, sin contraseña, scripts ni archivos adjuntos.
+            PDF de hasta 40 MB, sin contraseña, scripts ni archivos adjuntos.
           </p>
           <label>
             {report.archivoId ? "Seleccionar otro PDF" : "Archivo PDF"}

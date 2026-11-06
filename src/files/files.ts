@@ -14,7 +14,14 @@ import { sealPdf, openPdf } from './encryption';
 import { EXTENSIONES_ADJUNTO } from './medios';
 import { abrirTramo, sellarArchivo } from './sellado';
 
-export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+/**
+ * 40 MB por PDF (06/11/2026; antes 10). Las ecografías que exporta FileMaker
+ * llevan las fotos en calidad máxima y pasaban de 10 MB: el guion recibía 413 y
+ * el informe no se publicaba. El paciente ve la versión liviana (`aligerar.ts`,
+ * unas tres veces menor); este tope es el del original. Apache tiene la misma
+ * excepción en las dos rutas que suben un PDF (`docs/operacion.md`).
+ */
+export const MAX_PDF_BYTES = 40 * 1024 * 1024;
 /** `<uuid>.<extensión>` de un adjunto. Lo arma el servidor; nunca viene del cliente. */
 const CLAVE_ADJUNTO = new RegExp(`^[a-f0-9-]{36}\\.(${EXTENSIONES_ADJUNTO.join('|')})$`);
 
@@ -39,7 +46,7 @@ const forbidden = new Set([
 ]);
 
 export async function validatePdf(buffer: Buffer): Promise<{ paginas: number; sha256: string }> {
-  if (buffer.length === 0 || buffer.length > MAX_PDF_BYTES) problem(413, 'PDF_TAMANO_INVALIDO', 'Adjunta un PDF de hasta 10 MB.');
+  if (buffer.length === 0 || buffer.length > MAX_PDF_BYTES) problem(413, 'PDF_TAMANO_INVALIDO', 'Adjunta un PDF de hasta 40 MB.');
   if (!buffer.subarray(0, 8).toString('ascii').startsWith('%PDF-')) problem(400, 'PDF_INVALIDO', 'El archivo no es un PDF válido. Exporta el informe a PDF y vuelve a adjuntarlo.');
   let pdf: PDFDocument;
   try { pdf = await PDFDocument.load(buffer, { ignoreEncryption: false, updateMetadata: false, throwOnInvalidObject: true }); }

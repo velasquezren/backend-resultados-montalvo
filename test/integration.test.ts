@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { createApp } from '../src/app';
 import { Database } from '../src/database';
 import { AuthService } from '../src/auth/auth';
@@ -922,4 +922,27 @@ test('la búsqueda exacta ambigua exige elegir PAC o CI y respeta el alcance mé
   const sesion = await api<{ token: string }>('/v1/auth/login', 'POST', { email: correo, password: 'clave-sintetica-pruebas' });
   assert.equal(sesion.status, 200);
   assert.equal((await api(`/v1/informes/${nuevo.data.informe.id}`, 'GET', undefined, sesion.data.token)).status, 404);
+});
+
+/* 06/11/2026: las ecografías con fotos pasaban de 10 MB y FileMaker recibía 413. */
+test('FileMaker: un PDF de más de 10 MB se publica; más de 40 MB, 413 con el tope en el mensaje', async () => {
+  await db.limiteIntentos.deleteMany({});
+  const pesado = async (bytes: number) => {
+    const documento = await PDFDocument.create();
+    const pagina = documento.addPage([300, 400]);
+    /* Un flujo de contenido grande y válido: espacios, como el relleno de un PDF real. */
+    pagina.node.set(PDFName.of('Contents'), documento.context.register(documento.context.stream(Buffer.alloc(bytes, 0x20))));
+    return Buffer.from(await documento.save({ useObjectStreams: false }));
+  };
+  const doce = await pesado(12 * 1024 * 1024);
+  assert.ok(doce.length > 12 * 1024 * 1024);
+  const r = await desdeFileMaker(camposFileMaker({ pac: `PAC-GRANDE-${randomUUID().slice(0, 8)}`, publicar: 'true' }), undefined, doce);
+  assert.equal(r.status, 201);
+  assert.equal(r.data.estado, 'PUBLICADO');
+  const guardado = await db.informe.findUniqueOrThrow({ where: { id: r.data.informeId }, select: { archivo: { select: { bytes: true } } } });
+  assert.equal(guardado.archivo?.bytes, doce.length);
+
+  const demasiado = await desdeFileMaker(camposFileMaker({ pac: `PAC-ENORME-${randomUUID().slice(0, 8)}`, publicar: 'true' }), undefined, await pesado(41 * 1024 * 1024));
+  assert.equal(demasiado.status, 413);
+  assert.match(JSON.stringify(demasiado.data), /hasta 40 MB el PDF/);
 });

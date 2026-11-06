@@ -115,6 +115,7 @@ Lo que la función necesita del servidor (aplicado el 2026-10-03; plantillas en 
 | --- | --- | --- |
 | ClamAV (`/etc/clamav/clamd.conf`) | `StreamMaxLength 110M`, `MaxFileSize 110M`, `MaxScanSize 220M` | Con 12M respondía «size limit exceeded» y ningún video podía verificarse. La API lo distingue de un virus: 503 y el evento `clamd_limite_tamano` en el log |
 | Apache (vhost HTTPS) | `<LocationMatch "^/api/v1/informes/[^/]+/adjuntos$"> LimitRequestBody 110100480` | El resto del portal conserva los 11 MB |
+| Apache (vhost HTTPS), desde el 06/11/2026 | `<LocationMatch "^(/v1/integraciones/filemaker/informe\|/api/v1/informes/[^/]+/pdf)$"> LimitRequestBody 44040192` | El PDF de un informe sube a 40 MB (`MAX_PDF_BYTES`, CHECK `Archivo_limites`, proxy del portal a 41 MB); 42 MB aquí para que el mensaje lo dé la API y no un 413 de Apache |
 | Proxy de Next | Tope propio de 101 MB y 15 minutos, en flujo | Ver `portal/app/api/[...path]/route.ts` |
 
 **Copias.** `montalvo-resultados-backup` copia cada noche TODOS los archivos, videos incluidos, y hasta el 2026-10-03 no borraba ninguna copia (20 acumuladas, 509 MB). Con videos el disco —compartido con el CRM— se llena en semanas. Desde el 2026-10-26 el servidor retiene **7 días** (`ops/copias-cifradas.sh`, autorizado por el propietario). Lo histórico queda fuera del VPS en `gs://crm-clinica-montalvo-respaldos` (`resultados/diario/` 35 días, `resultados/mensual/` 13 meses, `resultados/archivos/` incremental), con el script `respaldo-externo.sh` del repositorio del CRM.

@@ -15,7 +15,7 @@ const noStore = {
 /**
  * El cuerpo de una subida de adjunto, en flujo y con tope: cuenta los bytes a
  * medida que pasan y corta al superar el límite. Juntarlo en memoria —como
- * los PDF de 10 MB— serían 100 MB por subida en este proceso.
+ * los PDF de 40 MB— serían 100 MB por subida en este proceso.
  */
 function cuerpoConTope(cuerpo: ReadableStream<Uint8Array>, limite: number, alExceder: () => void) {
   let total = 0;
@@ -99,7 +99,8 @@ async function handler(
       if (request.body)
         body = cuerpoConTope(request.body, LIMITE_SUBIDA_ADJUNTO, () => (excedido = true));
     } else if (request.method === "POST") {
-      const limit = multipart ? 11 * 1024 * 1024 : 64 * 1024;
+      /* El PDF de un informe (40 MB en la API) más el resto del formulario. */
+      const limit = multipart ? 41 * 1024 * 1024 : 64 * 1024;
       if (Number(request.headers.get("content-length") ?? 0) > limit)
         return error(413, "El archivo supera el tamaño permitido.");
       const reader = request.body?.getReader();
