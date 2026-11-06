@@ -19,9 +19,9 @@ type DatosMarca = {
   /** El 32 px de la cabecera. */
   readonly isotipo: string;
   /**
-   * A dónde escribe el paciente para pedir ayuda o agendar. Climon aún no tiene
-   * línea propia (pendiente en su landing): va a Recepción, que es desde donde
-   * le llega el aviso, así su respuesta cae en ese mismo chat del CRM.
+   * A dónde escribe el paciente para pedir ayuda o agendar: el número desde
+   * el que le llega el aviso, así su mensaje cae en ese mismo chat del CRM.
+   * Climon tiene el suyo, la línea «Laboratorio CLIMON» (06/11/2026).
    */
   readonly whatsapp: string;
 };
@@ -39,7 +39,7 @@ export const MARCAS: Readonly<Record<Marca, DatosMarca>> = {
     razonSocial: "Laboratorio Clínico Climon S.R.L.",
     ruta: "/laboratorio",
     isotipo: "/climon/isotipo.png",
-    whatsapp: "59175031306",
+    whatsapp: "59162140323",
   },
 };
 
