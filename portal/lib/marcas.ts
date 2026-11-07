@@ -39,7 +39,7 @@ export const MARCAS: Readonly<Record<Marca, DatosMarca>> = {
     razonSocial: "Laboratorio Clínico Climon S.R.L.",
     ruta: "/laboratorio",
     isotipo: "/climon/isotipo.png",
-    whatsapp: "59162140323",
+    whatsapp: "59177385889",
   },
 };
 

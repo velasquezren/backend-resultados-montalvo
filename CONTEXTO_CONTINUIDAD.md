@@ -50,8 +50,8 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 ## Bitácora (más reciente arriba)
 
 > **06/11/2026, tarde — Pendiente, SIN desplegar: «Pedir ayuda» de Climon a su
-> número (`aa87f54`).** `portal/lib/marcas.ts` → `59162140323` (línea Laboratorio
-> CLIMON). Se despliega **junto con** el encendido del aviso de laboratorio desde esa
+> número (`aa87f54`).** `portal/lib/marcas.ts` → `59177385889` (línea Laboratorio
+> CLIMON, número real de su WABA). Se despliega **junto con** el encendido del aviso de laboratorio desde esa
 > línea (CRM `ff41118`, pasos en `docs/plantillas-whatsapp.md` §7 del backend del
 > CRM), cuando Meta apruebe `climon_resultado_laboratorio`. Antes no: hoy el aviso de
 > laboratorio aún llega desde Recepción.

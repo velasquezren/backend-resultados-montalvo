@@ -14,7 +14,7 @@ test("laboratorio lo entrega Laboratorio Climon; lo demás, Clínica Montalvo", 
   assert.equal(paginaDelPaciente("climon", A), `/laboratorio/${A}`);
   assert.equal(paginaDelPaciente("montalvo", A), `/resultados/${A}`);
   /* La ayuda va al número desde el que llegó el aviso: el laboratorio tiene el suyo. */
-  assert.equal(MARCAS.climon.whatsapp, "59162140323");
+  assert.equal(MARCAS.climon.whatsapp, "59177385889");
   assert.equal(MARCAS.montalvo.whatsapp, "59175031306");
 });
 
