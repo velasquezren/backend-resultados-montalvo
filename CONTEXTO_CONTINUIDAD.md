@@ -49,6 +49,12 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 
 ## Bitácora (más reciente arriba)
 
+> **09/11/2026, ~10:30 La Paz — «Pedir ayuda» de Climon a +591 77385889 DESPLEGADO (`8ae823e`).**
+> Release `/opt/montalvo-resultados/releases/20261109-climon-numero-8ae823e` (sin migración ni
+> cambios de Apache); vuelta atrás `/root/backup-resultados-20261109-102850-climon-numero/revertir.sh`.
+> Va junto con el CRM `0c5065e`, que desde las ~10:24 manda los informes LABORATORIO por la línea
+> Laboratorio CLIMON con `climon_resultado_laboratorio` (aprobada).
+
 > **06/11/2026, tarde — Pendiente, SIN desplegar: «Pedir ayuda» de Climon a su
 > número (`aa87f54`).** `portal/lib/marcas.ts` → `59177385889` (línea Laboratorio
 > CLIMON, número real de su WABA). Se despliega **junto con** el encendido del aviso de laboratorio desde esa
