@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Actor } from '../auth/auth';
 import { AppConfig, CONFIG } from '../config';
 import { Database, Prisma, Transaction } from '../database';
-import { CrearInformeDto, InformesCrmDto, ListarDto, PanoramaCrmDto, PublicarDto, RetirarDto } from '../dto';
+import { ConstanciaCrmDto, CrearInformeDto, InformesCrmDto, ListarDto, PanoramaCrmDto, PublicarDto, RetirarDto } from '../dto';
 import { problem } from '../errors';
 import { PrivateFiles, PdfScanner, validatePdf } from '../files/files';
 import { DURACION_REVISION_MS, firmarRevision, leerRevision } from './revision';
@@ -26,6 +26,12 @@ const detail = { acceso: { select: { id: true, expiraEn: true, revocadoEn: true 
 export const TOPE_TRABAJO_CRM = 5000;
 
 /** Lo publicado que la cola del CRM puede ver: con su acceso de paciente. */
+/** Lo que hace el paciente con su enlace y queda en la auditoría (ver `portal.ts`). */
+const ACCIONES_PACIENTE = ['PDF_DESCARGADO_PACIENTE', 'PDF_ORIGINAL_DESCARGADO_PACIENTE', 'ADJUNTO_DESCARGADO_PACIENTE'] as const;
+type AccionPaciente = (typeof ACCIONES_PACIENTE)[number];
+const ACCIONES_PACIENTE_CLAVE: Record<AccionPaciente, 'pdf' | 'original' | 'adjuntos'> = {
+  PDF_DESCARGADO_PACIENTE: 'pdf', PDF_ORIGINAL_DESCARGADO_PACIENTE: 'original', ADJUNTO_DESCARGADO_PACIENTE: 'adjuntos',
+};
 const PUBLICADO_CON_ACCESO = { estado: 'PUBLICADO', acceso: { isNot: null } } satisfies Prisma.InformeWhereInput;
 
 /**
@@ -191,6 +197,56 @@ export class Results {
     const pdf = await this.readFile(archivoParaVer(informe));
     await this.db.auditoria.create({ data: { actorId: 'crm', accion: 'PDF_REVISADO_CRM', informeId } });
     return pdf;
+  }
+
+  /**
+   * Lo que el portal sabe de cada informe para la constancia mensual de
+   * entregas del CRM: de quién es, qué estudio, y lo que hizo el paciente con
+   * su enlace —primera apertura y descargas—.
+   *
+   * A diferencia de la cola, incluye los RETIRADOS: la constancia dice lo que
+   * pasó con un aviso ya enviado, y que el informe se retirara después es parte
+   * de esa historia, no motivo para que la fila quede sin paciente. Lo que no
+   * vuelve es lo que ya no existe (un informe borrado).
+   *
+   * Las descargas se cuentan en SQL por informe y acción, no se traen una a
+   * una: un paciente que abre su informe veinte veces son veinte filas de
+   * auditoría y aquí basta con cuántas, la primera y la última.
+   */
+  async constanciaForCrm(dto: ConstanciaCrmDto) {
+    const ids = [...new Set(dto.ids)];
+    /* Dos lecturas sueltas y no un `$transaction([...])`: dentro de esa forma
+       Prisma pierde el tipo de `groupBy`. Nada se escribe aquí. */
+    const [informes, descargas] = await Promise.all([
+      this.db.informe.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, tipo: true, estudio: true, fechaEstudio: true, estado: true, publicadoEn: true, retiradoEn: true,
+          paciente: { select: { nombre: true, pac: true, ci: true } }, medico: { select: { nombre: true } },
+          acceso: { select: { abiertoEn: true, expiraEn: true, revocadoEn: true } } },
+      }),
+      this.db.auditoria.groupBy({
+        by: ['informeId', 'accion'],
+        where: { informeId: { in: ids }, accion: { in: [...ACCIONES_PACIENTE] } },
+        _count: { _all: true }, _min: { createdAt: true }, _max: { createdAt: true },
+      }),
+    ]);
+    const porInforme = new Map<string, Record<string, { veces: number; primera: Date | null; ultima: Date | null }>>();
+    for (const fila of descargas) {
+      if (!fila.informeId) continue;
+      porInforme.set(fila.informeId, { ...porInforme.get(fila.informeId),
+        [ACCIONES_PACIENTE_CLAVE[fila.accion as AccionPaciente]]: { veces: fila._count._all, primera: fila._min.createdAt, ultima: fila._max.createdAt } });
+    }
+    return {
+      datos: informes.map(informe => {
+        const d = porInforme.get(informe.id) ?? {};
+        return {
+          informeId: informe.id, tipo: informe.tipo, estudio: informe.estudio, fechaEstudio: informe.fechaEstudio,
+          estado: informe.estado, publicadoEn: informe.publicadoEn, retiradoEn: informe.retiradoEn,
+          paciente: informe.paciente, medico: informe.medico.nombre, acceso: informe.acceso,
+          descargas: { pdf: d.pdf ?? null, original: d.original ?? null, adjuntos: d.adjuntos ?? null },
+        };
+      }),
+    };
   }
 
   /** Los estudios ya registrados, para ofrecerlos como sugerencia al escribir. */

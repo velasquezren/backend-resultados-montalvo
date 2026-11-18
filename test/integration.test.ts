@@ -225,6 +225,46 @@ test('el paciente abre su informe solo con el enlace y queda registrado que lo a
   const pdf = await fetch(`${base}/v1/portal/informe/pdf`, { headers: { Authorization: `Bearer ${login.data.token}` } });
   assert.equal(pdf.headers.get('content-disposition')?.startsWith('inline'), true, 'se abre en el visor del teléfono');
 });
+test('constancia del CRM: paciente, primera apertura y descargas, también de un informe retirado', async () => {
+  const crm = 'c'.repeat(40);
+  type Uso = { veces: number; primera: string; ultima: string } | null;
+  type Fila = { informeId: string; estado: string; medico: string; paciente: { nombre: string; pac: string | null };
+    acceso: { abiertoEn: string | null } | null; descargas: { pdf: Uso; original: Uso; adjuntos: Uso } };
+  const visto = await ready(); assert.equal((await publish(visto.informe)).status, 200);
+  const sinAbrir = await ready(); assert.equal((await publish(sinAbrir.informe)).status, 200);
+  const login = await patientLogin(visto.acceso);
+  assert.equal((await api('/v1/portal/informe', 'GET', undefined, login.data.token)).status, 200);
+  for (const ruta of ['/v1/portal/informe/pdf', '/v1/portal/informe/pdf', '/v1/portal/informe/pdf/original']) {
+    const r = await fetch(`${base}${ruta}`, { headers: { Authorization: `Bearer ${login.data.token}` } });
+    assert.equal(r.status, 200); await r.arrayBuffer();
+  }
+  /* El médico y el CRM no cuentan como paciente. */
+  await fetch(`${base}/v1/informes/${visto.informe.id}/pdf`, { headers: { Authorization: `Bearer ${medico}` } }).then(r => r.arrayBuffer());
+  const actual = await api<{ revision: number }>(`/v1/informes/${visto.informe.id}`, 'GET', undefined, medico);
+  assert.equal((await api(`/v1/informes/${visto.informe.id}/retirar`, 'POST', { revision: actual.data.revision, motivo: 'Retiro de prueba de constancia' }, medico)).status, 200);
+
+  const ids = [visto.informe.id, sinAbrir.informe.id, randomUUID()];
+  const r = await api<{ datos: Fila[] }>('/v1/integraciones/crm/informes/constancia', 'POST', { ids }, crm);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.datos.length, 2, 'el que no existe no vuelve');
+  const a = r.data.datos.find(f => f.informeId === visto.informe.id)!;
+  assert.equal(a.estado, 'RETIRADO');
+  assert.equal(a.paciente.nombre, 'Paciente sintético');
+  assert.ok(a.medico);
+  assert.ok(a.acceso?.abiertoEn);
+  assert.equal(a.descargas.pdf?.veces, 2);
+  assert.ok(Date.parse(a.descargas.pdf!.primera) <= Date.parse(a.descargas.pdf!.ultima));
+  assert.equal(a.descargas.original?.veces, 1);
+  assert.equal(a.descargas.adjuntos, null);
+  const b = r.data.datos.find(f => f.informeId === sinAbrir.informe.id)!;
+  assert.equal(b.acceso?.abiertoEn, null);
+  assert.deepEqual(b.descargas, { pdf: null, original: null, adjuntos: null });
+
+  assert.equal((await api('/v1/integraciones/crm/informes/constancia', 'POST', { ids })).status, 401);
+  for (const malo of [{ ids: [] }, { ids: ['no-es-uuid'] }, { ids: Array.from({ length: 101 }, () => randomUUID()) }, {}]) {
+    assert.equal((await api('/v1/integraciones/crm/informes/constancia', 'POST', malo, crm)).status, 400, JSON.stringify(malo).slice(0, 40));
+  }
+});
 test('renovar extiende el mismo enlace: el vencido vuelve a abrir sin mandar otro', async () => {
   const report = await ready(); assert.equal((await publish(report.informe)).status, 200);
   await db.accesoPaciente.update({ where: { id: report.acceso.id }, data: { expiraEn: new Date(0) } });

@@ -1,5 +1,5 @@
 import { Type, Transform } from 'class-transformer';
-import { ArrayMaxSize, Equals, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { EstadoInforme, Rol } from './generated/prisma/client';
 import { TIPOS_INFORME, TipoInforme } from './results/tipos';
 
@@ -134,6 +134,14 @@ export class InformesCrmDto {
 export class PanoramaCrmDto {
   @ValidateIf((_object, value: unknown) => value !== undefined) @IsIn(TIPOS_INFORME) tipo?: TipoInforme;
   @IsOptional() @Transform(recortar) @IsString() @Length(2, 80) buscar?: string;
+}
+/**
+ * Los informes de una página de la constancia mensual del CRM. Por cuerpo y no
+ * en la URL: cien ids no caben con holgura en una query y no deben quedar en
+ * los registros del proxy.
+ */
+export class ConstanciaCrmDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID('all', { each: true }) ids!: string[];
 }
 export class PasswordDto {
   @IsString() @Length(1, 128) actual!: string;

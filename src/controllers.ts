@@ -8,7 +8,7 @@ import { diskStorage } from 'multer';
 import { Attempts, AuthRequest, AuthService, bearer, Public } from './auth/auth';
 import { equalSecret } from './auth/crypto';
 import { Database } from './database';
-import { BuscarPacienteDto, CrearInformeDto, FileMakerInformeDto, InformesCrmDto, ListarDto, LoginDto, PanoramaCrmDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
+import { BuscarPacienteDto, ConstanciaCrmDto, CrearInformeDto, FileMakerInformeDto, InformesCrmDto, ListarDto, LoginDto, PanoramaCrmDto, PasswordDto, PacienteDto, PublicarDto, RetirarDto, RevisionDto, UserDto } from './dto';
 import { problem } from './errors';
 import { MAX_PDF_BYTES } from './files/files';
 import { MAX_ADJUNTO_BYTES, MAX_ADJUNTOS_POR_INFORME } from './files/medios';
@@ -211,6 +211,16 @@ export class CrmIntegrationController {
     this.authorize(req);
     await this.attempts.consume('crm-panorama', 'consumer', 60, 60);
     return this.results.panoramaForCrm(dto);
+  }
+  /**
+   * Una página de la constancia mensual de entregas del CRM: paciente, estudio,
+   * primera apertura y descargas de cada informe avisado. Solo lectura; incluye
+   * retirados. Ver `Results.constanciaForCrm`.
+   */
+  @Post('informes/constancia') @HttpCode(200) async constancia(@Body() dto: ConstanciaCrmDto, @Req() req: Request) {
+    this.authorize(req);
+    await this.attempts.consume('crm-constancia', 'consumer', 60, 60);
+    return this.results.constanciaForCrm(dto);
   }
   /**
    * El enlace para que la asistente vea qué informe va a enviar, en el visor
