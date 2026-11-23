@@ -9,4 +9,4 @@ Lee `README.md`, `CONTEXTO_CONTINUIDAD.md` y la documentación del área que vay
 - Nunca incluyas secretos, datos clínicos reales, PDFs de pacientes ni valores de `.env` en Git, ejemplos o registros.
 - Los repositorios se usan desde varias máquinas: comprueba `git status` y el historial remoto antes de editar. No despliegues ni modifiques producción salvo petición explícita.
 
-Los skills del proyecto están bajo `.agents/skills/` para incluirlos en Git. Una instalación global de un agente no es requisito para trabajar aquí.
+Los skills del proyecto están bajo `.agents/skills/` para incluirlos en Git; `.claude/skills/` los enlaza para Claude Code, que no lee `.agents/`. Una instalación global de un agente no es requisito para trabajar aquí.
