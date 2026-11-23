@@ -13,8 +13,8 @@ comprobar su estado: esto es una foto, no una garantía.
 - **Qué es:** portal independiente para médicos y pacientes. API NestJS 12 y
   portal Next 16 en este repositorio; base propia `resultados_prod`. No comparte
   base, usuarios ni sesiones con el CRM. Los médicos no usan el CRM.
-- **En producción:** release `/opt/montalvo-resultados/releases/20261106-pdf-40mb-64c3ff7`
-  (`current`, desde el 06/11; antes `20261106-laboratorio-climon-49b5ad5`), servicios `resultados-api` (:3010), `resultados-worker` (limpieza
+- **En producción:** release `/opt/montalvo-resultados/releases/20261123-seguridad-5bb85dd`
+  (`current`, desde el 23/11; antes `20261118-constancia-5a3f7ec`), servicios `resultados-api` (:3010), `resultados-worker` (limpieza
   horaria) y `resultados-portal` (:3011), Node 22.23.1, ClamAV y
   `STORAGE_DRIVER=local-encrypted` (PDF cifrados `MNTV1`/`MNTV2`). Portal en
   `https://resultados.107.175.132.15.nip.io/`; certificado hasta el 20/12/2026
@@ -48,6 +48,18 @@ regenerar claves. El portal se compila con `npm run build -- --webpack` como
 `resultados-web`.
 
 ## Bitácora (más reciente arriba)
+
+> **23/11/2026, 14:46 (hora del VPS) — parche de seguridad DESPLEGADO (`5bb85dd`, código `ef203ac`).**
+> Portal Next 16.3.4 → 16.4.6 (RCE en `next/og` y en la optimización de imágenes,
+> SSRF, envenenamiento de caché) y API `@nestjs/*` 12.0.4 → 12.6.0 (DoS de `multer`
+> y `body-parser` en subidas). Release `/opt/montalvo-resultados/releases/20261123-seguridad-5bb85dd`,
+> sin migración ni cambios de schema, Apache ni variables. Portal compilado con
+> `portal.env` cargado y `--webpack`; drop-in `20-pdf-cache.conf` apunta a su
+> `.next/cache`. Respaldo previo `/root/backups-resultados/20261123T191407Z`
+> (verificado) y reversión en `/root/backup-resultados-20261123-143323-seguridad/revertir.sh`
+> (vuelve a `20261118-constancia-5a3f7ec`). En el VPS: 23 unitarias y 24 del portal;
+> `/health/ready` 200; por HTTPS `/`, `robots.txt` e imágenes `next/og` 200, API sin
+> sesión 403. El 143 del portal al reiniciar es el SIGTERM del proceso anterior.
 
 > **09/11/2026, ~10:30 La Paz — «Pedir ayuda» de Climon a +591 77385889 DESPLEGADO (`8ae823e`).**
 > Release `/opt/montalvo-resultados/releases/20261109-climon-numero-8ae823e` (sin migración ni
