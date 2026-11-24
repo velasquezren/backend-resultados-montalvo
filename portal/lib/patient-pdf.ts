@@ -69,7 +69,7 @@ export async function pdfDelPaciente(request: Request, accesoId: string, marca: 
       await pdf.body?.cancel();
       return fallo([401, 404, 409, 429].includes(pdf.status) ? pdf.status : 503, accesoId, marca);
     }
-    if (pdf.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/pdf") {
+    if (pdf.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/pdf") {
       await pdf.body?.cancel();
       return fallo(502, accesoId, marca);
     }

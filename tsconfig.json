@@ -3,6 +3,8 @@
     "target": "ES2023", "module": "CommonJS", "moduleResolution": "Node",
     "lib": ["ES2023", "DOM"], "outDir": "dist", "rootDir": ".",
     "strict": true, "noUncheckedIndexedAccess": true, "noEmitOnError": true,
+    "noImplicitReturns": true, "noImplicitOverride": true, "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true, "noUnusedParameters": true,
     "experimentalDecorators": true, "emitDecoratorMetadata": true,
     "esModuleInterop": true, "skipLibCheck": true, "forceConsistentCasingInFileNames": true,
     "sourceMap": true

@@ -29,6 +29,10 @@
     "incremental": true,
     "allowImportingTsExtensions": true,
     "noUnusedLocals": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
     "noUnusedParameters": true
   },
   "include": [

@@ -57,8 +57,8 @@ test("visor sin cookie: abre exclusivamente el informe del enlace y conserva pri
   assert.equal(respuesta.headers.get("referrer-policy"), "no-referrer");
   assert.equal(respuesta.headers.get("set-cookie"), null);
   assert.equal(solicitudes.length, 2);
-  assert.equal(solicitudes[0].authorization, undefined);
-  assert.equal(solicitudes[1].authorization, `Bearer sintetico-${A}`);
+  assert.equal(solicitudes[0]?.authorization, undefined);
+  assert.equal(solicitudes[1]?.authorization, `Bearer sintetico-${A}`);
   assert.ok(solicitudes.every((s) => s.ip === "192.0.2.1" && !s.cookie));
 });
 
@@ -84,7 +84,7 @@ test("original usa ruta original y attachment; consultas arbitrarias no se reenv
   assert.match(respuesta.headers.get("content-disposition")!, /^attachment;/);
   const bytes = await respuesta.arrayBuffer();
   assert.equal(bytes.byteLength, Number(respuesta.headers.get("content-length")));
-  assert.equal(solicitudes[1].url, "/v1/portal/informe/pdf/original");
+  assert.equal(solicitudes[1]?.url, "/v1/portal/informe/pdf/original");
 });
 
 for (const [caso, status] of [
