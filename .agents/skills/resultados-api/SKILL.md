@@ -24,7 +24,7 @@ Revisa el contrato HTTP, las rutas del portal que lo consumen y la documentació
 
 | Área tocada | Comando |
 |---|---|
-| API (siempre) | `npm test` (compila y corre las unitarias) |
+| API (siempre) | `npm test` (lint con tipos + compila + unitarias; el lint es `npm run lint`, ESLint en `eslint.config.mjs`) |
 | Persistencia, permisos, archivos, concurrencia | aplicar migraciones a la base de prueba y luego la integración (abajo) |
 | Portal | `cd portal && node --experimental-strip-types --test test/*.test.ts && npm run typecheck && npm run build` |
 | Dependencias | `npm audit --omit=dev` en la raíz y en `portal/`; el único aviso aceptado es `effect` vía la CLI de Prisma |

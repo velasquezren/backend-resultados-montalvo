@@ -253,7 +253,7 @@ test('constancia del CRM: paciente, primera apertura y descargas, también de un
   assert.ok(a.medico);
   assert.ok(a.acceso?.abiertoEn);
   assert.equal(a.descargas.pdf?.veces, 2);
-  assert.ok(Date.parse(a.descargas.pdf!.primera) <= Date.parse(a.descargas.pdf!.ultima));
+  assert.ok(Date.parse(a.descargas.pdf.primera) <= Date.parse(a.descargas.pdf.ultima));
   assert.equal(a.descargas.original?.veces, 1);
   assert.equal(a.descargas.adjuntos, null);
   const b = r.data.datos.find(f => f.informeId === sinAbrir.informe.id)!;
@@ -521,8 +521,8 @@ test('FileMaker: dos primeros envíos y dos reemplazos simultáneos dejan un sol
   const campos = camposFileMaker({ pac: `PAC-RACE-${randomUUID().slice(0, 8)}`, referencia: `FM-${randomUUID()}` });
   const iniciales = await Promise.all([desdeFileMaker(campos), desdeFileMaker(campos)]);
   for (const r of iniciales) assert.equal(r.status, 201);
-  const id = iniciales[0]!.data.informeId;
-  assert.equal(iniciales[1]!.data.informeId, id);
+  const id = iniciales[0].data.informeId;
+  assert.equal(iniciales[1].data.informeId, id);
   assert.equal(iniciales.filter(r => !r.data.repetido).length, 1);
   const document = await PDFDocument.create(); document.addPage(); document.addPage();
   const nuevoPdf = Buffer.from(await document.save());
